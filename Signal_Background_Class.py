@@ -1,3 +1,4 @@
+import os
 import numpy as np  
 from Background_Class import Background
 from Signal_Class import Signal
@@ -10,6 +11,8 @@ from matplotlib.colors import Normalize
 from iminuit import Minuit
 from iminuit.cost import ExtendedUnbinnedNLL
 from tabulate import tabulate
+import pandas as pd
+from tqdm import tqdm
 
 class Signal_Background:
     """
@@ -126,27 +129,8 @@ class Signal_Background:
             0 if X is outside [lower_bound_X, upper_bound_X] or Y is outside [lower_bound_Y, upper_bound_Y].
         """
         return self.f * self.Signal.pdf(X, Y) + (1 - self.f) * self.Background.pdf(X, Y)
-    
-    def pdf_fitting(self, X, Y, mu, sigma, beta, m, lamb, mu_b, sigma_b, f):
-        """
-        Calculate the joint Probability Density Function (PDF) for given parameters.
 
-        Parameters
-        ----------
-        X, Y : float or np.ndarray
-            Values where the PDF is evaluated.
-        mu, sigma, beta, m, lamb, mu_b, sigma_b, f : float
-            Parameters to use for the calculation.
 
-        Returns
-        -------
-        np.ndarray
-            PDF values for the input X, Y.
-        """
-        return f * self.Signal.pdf_fitting(X, Y, mu, sigma, beta, m, lamb) + (1 - f) * self.Background.pdf_fitting(X, Y, mu_b, sigma_b)
-    
-    
-    
     def cdf(self, X, Y):
         """
         Compute the joint Cumulative Distribution Function (CDF).
@@ -171,7 +155,7 @@ class Signal_Background:
         """
 
         return self.f * self.Signal.cdf(X, Y) + (1 - self.f) * self.Background.cdf(X, Y)
-        return max_val
+
     
     def _find_max_pdf(self):
         """
@@ -213,201 +197,6 @@ class Signal_Background:
             raise RuntimeError("Optimisation failed")
         
         return max_pdf
-    
-    def accept_reject_sample(self, desired_samples=100000, init_batch_size=1000, max_batch_size=2000000):
-        """
-        Generate random samples from the joint Signal-Background distribution
-        using the accept-reject method with dynamic batch sizing.
-
-        This method uses an initial batch to estimate the acceptance rate and 
-        dynamically adjusts the batch size to efficiently generate the required number 
-        of samples.
-
-        Parameters
-        ----------
-        desired_samples : int, optional
-            Total number of samples to generate (default: 100,000).
-        init_batch_size : int, optional
-            Batch size for the initial sampling to estimate the acceptance rate (default: 1,000).
-        max_batch_size : int, optional
-            Maximum batch size for iterations to prevent overloading memory (default: 2,000,000).
-            May need adjusting for devices with limited memory.
-
-        Returns
-        -------
-        np.ndarray
-            Array of shape (desired_samples, 2) containing the sampled (X, Y) points.
-
-        Raises
-        ------
-        ValueError
-            If any of the bounds are not defined, this is required to generate sample
-
-        Notes
-        -----
-        - The initial batch estimates the acceptance rate as:
-          acceptance_rate = (Number of Accepted Samples in Initial Batch) / (Initial Batch Size)
-        - Subsequent batch sizes are calculated dynamically based on the acceptance rate and
-          the number of remaining desired samples, with a 10% buffer.
-        - A maximum batch size (`max_batch_size`) is enforced to ensure memory efficiency.
-        """
-        if self.lower_bound_X is None or self.upper_bound_X is None or self.lower_bound_Y is None or self.upper_bound_Y is None:
-            raise ValueError("To preform Accept-reject sampling both X and Y limits must be set.")
-        
-        # Pre-allocate space for samples
-        samples = np.empty((desired_samples, 2))
-        sample_count = 0
-
-        # Run an inital batch to estimate the acceptance rate the dynamic batch size on
-        # Generates smaller batches: X, Y, Uniform Random, True Values
-        batch_X = np.random.uniform(self.lower_bound_X, self.upper_bound_X, size=init_batch_size)
-        batch_Y = np.random.uniform(self.lower_bound_Y, self.upper_bound_Y, size=init_batch_size)
-        batch_uniform = np.random.uniform(0, self.max_pdf, size=init_batch_size)
-        batch_true_vals = self.pdf(batch_X, batch_Y)
-
-        # Compare Uniform Random to find the accepted samples, where within pdf
-        # Each index is a boolean value
-        batch_accept_index = batch_uniform <= batch_true_vals
-
-        # Collect x and y samples that are accepted
-        accepted_samples = np.array([batch_X[batch_accept_index], batch_Y[batch_accept_index]]).T
-
-        # Add samples to overall score the samples array with the accepted samples
-        num_accepted = len(accepted_samples)
-        samples[:num_accepted] = accepted_samples
-        sample_count += num_accepted
-
-
-        # Estimate acceptance rate
-        # Use np.sum to count the number of True values in the array
-        acceptance_rate = num_accepted/ init_batch_size
-        print(f"The initial batch acceptance rate is: {acceptance_rate}")
-
-
-        # While samples is less than desired number - produce samples to account for acceptance rate
-        # Generate samples in batches until the desired number of samples is reached - ideally in 1 batch
-        while sample_count < desired_samples:
-            # Calculate the remaining desired samples
-            remain_desired_samples = desired_samples - sample_count
-            # Calculate the batch size to generate based on remaining samples and acceptance rate
-            # A maximum batch size, 500000, is set to prevent overloading memory
-            # A 10% buffer is added to the batch size to ensure enough samples are generated
-            batch_size = min(int(1.1*(remain_desired_samples / acceptance_rate)), max_batch_size)
-            # Generate a new batch of proposals
-            batch_X = np.random.uniform(self.lower_bound_X, self.upper_bound_X, size=batch_size)
-            batch_Y = np.random.uniform(self.lower_bound_Y, self.upper_bound_Y, size=batch_size)
-            batch_uniform = np.random.uniform(0, self.max_pdf, size=batch_size)
-            batch_true_vals = self.pdf(batch_X, batch_Y)
-            batch_accept_index = batch_uniform <= batch_true_vals
-            accepted_samples = np.array([batch_X[batch_accept_index], batch_Y[batch_accept_index]]).T
-
-            num_accepted = len(accepted_samples)
-            remaining_space = desired_samples - sample_count
-            if num_accepted > remaining_space:
-                # Only take as many samples as needed to fill the array
-                samples[sample_count:] = accepted_samples[:remaining_space]
-                sample_count += remaining_space
-            else:
-                samples[sample_count:sample_count + num_accepted] = accepted_samples
-                sample_count += num_accepted
-            self.samples = samples
-            print(f"Accepted {num_accepted} out of {batch_size} samples in batch, total: {sample_count}")
-
-        return samples
-    
-    def plot_samples(self):
-        """
-        Plot the results of the sampled data in a 2x2 grid:
-        - Top-left: 3D histogram of the joint distribution
-        - Top-right: Surface plot of the joint PDF
-        - Bottom-left: Histogram of sampled X vs marginal PDF
-        - Bottom-right: Histogram of sampled Y vs marginal PDF
-        """
-        if self.samples is None:
-            raise ValueError("No samples have been generated. Please run the `accept_reject_sample` method first.")
-        
-        # Define ranges for X and Y based on bounds
-        X = np.linspace(self.lower_bound_X - 0.1*(self.upper_bound_X - self.lower_bound_X), self.upper_bound_X+ 0.1*(self.upper_bound_X - self.lower_bound_X), 1000)
-        Y = np.linspace(self.lower_bound_Y- 0.1*(self.upper_bound_Y - self.lower_bound_Y), self.upper_bound_Y+ 0.1*(self.upper_bound_Y - self.lower_bound_Y), 1000)
-
-        # Compute the PDF grid for plotting
-        X_grid, Y_grid = np.meshgrid(X, Y)
-        Z = self.pdf(X_grid, Y_grid)
-
-        samples = self.samples
-
-        # Set consistent font sizes
-        label_fontsize = 18
-        title_fontsize = 18
-        tick_fontsize = 16
-
-        fig = plt.figure(figsize=(14, 14))
-        spec = gridspec.GridSpec(2, 2, width_ratios=[1, 1], height_ratios=[1, 1.1])
-
-        # Top left: 3D histogram of samples
-        ax1 = fig.add_subplot(spec[0, 0], projection='3d')
-        hist, xedges, yedges = np.histogram2d(samples[:, 0], samples[:, 1], bins=30, 
-                                            range=[[self.lower_bound_X, self.upper_bound_X], 
-                                                    [self.lower_bound_Y, self.upper_bound_Y]])
-        xpos, ypos = np.meshgrid(xedges[:-1], yedges[:-1], indexing="ij")
-        xpos, ypos = xpos.ravel(), ypos.ravel()
-        zpos = np.zeros_like(xpos)
-        dx = dy = (xedges[1] - xedges[0])
-        dz = hist.ravel()
-
-        # Apply colormap
-        cmap = get_cmap('viridis')
-        norm = Normalize(vmin=dz.min(), vmax=dz.max())
-        colors = cmap(norm(dz))
-
-        ax1.bar3d(xpos, ypos, zpos, dx, dy, dz, shade=True, color=colors)
-        ax1.set_xlabel("X", fontsize=label_fontsize)
-        ax1.set_ylabel("Y", fontsize=label_fontsize)
-        ax1.set_zlabel("Frequency", fontsize=label_fontsize, labelpad = 20)
-        ax1.tick_params(axis='both', labelsize=tick_fontsize)
-        ax1.view_init(elev=30, azim=60)
-        ax1.set_title("3D Histogram of Joint Distribution", fontsize=title_fontsize)
-
-        # Top-right: Surface plot of the PDF
-        ax2 = fig.add_subplot(spec[0, 1], projection='3d')
-        ax2.plot_surface(X_grid, Y_grid, Z, cmap='viridis', alpha=0.9)
-        ax2.set_xlabel("X", fontsize=label_fontsize)
-        ax2.set_ylabel("Y", fontsize=label_fontsize, labelpad = 10)
-        ax2.set_zlabel("PDF Value", fontsize=label_fontsize, labelpad = 20)
-        ax2.tick_params(axis='both', labelsize=tick_fontsize)
-        ax2.view_init(elev=30, azim=60)
-        ax2.set_title("Surface Plot of True Joint PDF", fontsize=title_fontsize)
-
-        # Bottom-left: Histogram of X vs marginal PDF
-        ax3 = fig.add_subplot(spec[1, 0])
-        hist_X, bins_X, _ = ax3.hist(samples[:, 0], bins=30, density=True, alpha=0.5, color='navy', label="Sampled X")
-        bin_centers_X = 0.5 * (bins_X[:-1] + bins_X[1:])
-        _, _, marginal_total_X = self.marginal_pdf_x(X)
-        ax3.plot(X, marginal_total_X, label="Marginal PDF X", color="red", linewidth=4)
-        ax3.set_xlim(X[0], X[-1])
-        ax3.set_xlabel("X", fontsize=label_fontsize)
-        ax3.set_ylabel("Density", fontsize=label_fontsize)
-        ax3.tick_params(axis='both', labelsize=tick_fontsize)
-        ax3.legend(fontsize=label_fontsize)
-        ax3.set_title("Histogram of X with Marginal PDF of X", fontsize=title_fontsize)
-
-        # Bottom-right: Histogram of Y vs marginal PDF
-        ax4 = fig.add_subplot(spec[1, 1])
-        hist_Y, bins_Y, _ = ax4.hist(samples[:, 1], bins=30, density=True, alpha=0.5, color='navy', label="Sampled Y")
-        bin_centers_Y = 0.5 * (bins_Y[:-1] + bins_Y[1:])
-        _, _, marginal_total_Y = self.marginal_pdf_y(Y)
-        ax4.plot(Y, marginal_total_Y, label="Marginal PDF Y", color="red", linewidth=4)
-        ax4.set_xlim(Y[0], Y[-1])
-        ax4.set_xlabel("Y", fontsize=label_fontsize)
-        ax4.set_ylabel("Density", fontsize=label_fontsize)
-        ax4.tick_params(axis='both', labelsize=tick_fontsize)
-        ax4.legend(fontsize=label_fontsize)
-        ax4.set_title("Histogram of Y with Marginal PDF of X", fontsize=title_fontsize)
-
-        plt.tight_layout()
-        plt.show()
-
-    
 
     def normalisation_check(self):
         """
@@ -446,7 +235,7 @@ class Signal_Background:
 
         if (self.lower_bound_X is not None) or (self.upper_bound_X is not None) or (self.lower_bound_Y is not None) or (self.upper_bound_Y is not None):
             print(f"Normalisation over the region the PDF is defined/truncated: [{lower_bound_X}, {upper_bound_X}] in X, [{lower_bound_Y}, {upper_bound_Y}] in Y")
-            # have to use constant `lambda` functions for the y limits of integration due to format of 
+            # have to use constant `lambda` functions for the y limits of integration due to format of dblquad
             integral_bounds, error_bounds = dblquad(lambda y, x: self.pdf(x, y), lower_bound_X, upper_bound_X, lambda x: lower_bound_Y, lambda x: upper_bound_Y)
             print(f"Integral: {integral_bounds} \u00B1 {error_bounds}")
 
@@ -530,6 +319,7 @@ class Signal_Background:
         """
         signal_cont_pdf = self.f*self.Signal.X.pdf(X)
         background_cont_pdf = (1 - self.f)*self.Background.X.pdf(X)
+        # Return the signal, background and total PDF values seperately for plotting
         return signal_cont_pdf, background_cont_pdf, signal_cont_pdf + background_cont_pdf
     
     def marginal_cdf_x(self, X):
@@ -552,7 +342,7 @@ class Signal_Background:
         """
         signal_cont_cdf = self.f*self.Signal.X.cdf(X)
         background_cont_cdf = (1 - self.f)*self.Background.X.cdf(X)
-
+        # Return the signal, background and total PDF values seperately for plotting
         return signal_cont_cdf, background_cont_cdf, signal_cont_cdf + background_cont_cdf
     
     def marginal_pdf_y(self, Y):
@@ -575,7 +365,7 @@ class Signal_Background:
         """
         signal_cont_pdf = self.f*self.Signal.Y.pdf(Y)
         background_cont_pdf = (1 - self.f)*self.Background.Y.pdf(Y)
-
+        # Return the signal, background and total PDF values seperately for plotting
         return signal_cont_pdf, background_cont_pdf, signal_cont_pdf + background_cont_pdf
     
     def marginal_cdf_y(self, Y):
@@ -598,7 +388,7 @@ class Signal_Background:
         """
         signal_cont_cdf = self.f*self.Signal.Y.cdf(Y)
         background_cont_cdf = (1 - self.f)*self.Background.Y.cdf(Y)
-
+        # Return the signal, background and total PDF values seperately for plotting
         return signal_cont_cdf, background_cont_cdf, signal_cont_cdf + background_cont_cdf
 
     def plot_marginal(self):
@@ -669,7 +459,216 @@ class Signal_Background:
         plt.tight_layout()
         plt.show()
 
+    def accept_reject_sample(self, desired_samples=100000, init_batch_size=1000, max_batch_size=2000000, poisson = False, save_to_class=False):
+        """
+        Generate random samples from the joint Signal-Background distribution
+        using the accept-reject method with dynamic batch sizing.
 
+        This method uses an initial batch to estimate the acceptance rate and 
+        dynamically adjusts the batch size to efficiently generate the required number 
+        of samples.
+
+        Parameters
+        ----------
+        desired_samples : int, optional
+            Total number of samples to generate (default: 100,000).
+        init_batch_size : int, optional
+            Batch size for the initial sampling to estimate the acceptance rate (default: 1,000).
+        max_batch_size : int, optional
+            Maximum batch size for iterations to prevent overloading memory (default: 2,000,000).
+            May need adjusting for devices with limited memory.
+
+        Returns
+        -------
+        np.ndarray
+            Array of shape (desired_samples, 2) containing the sampled (X, Y) points.
+
+        Raises
+        ------
+        ValueError
+            If any of the bounds are not defined, this is required to generate sample
+
+        Notes
+        -----
+        - The initial batch estimates the acceptance rate as:
+          acceptance_rate = (Number of Accepted Samples in Initial Batch) / (Initial Batch Size)
+        - Subsequent batch sizes are calculated dynamically based on the acceptance rate and
+          the number of remaining desired samples, with a 10% buffer.
+        - A maximum batch size (`max_batch_size`) is enforced to ensure memory efficiency.
+        """
+        if self.lower_bound_X is None or self.upper_bound_X is None or self.lower_bound_Y is None or self.upper_bound_Y is None:
+            raise ValueError("To preform Accept-reject sampling both X and Y limits must be set.")
+
+            # Apply Poisson variation if enabled
+        if poisson:
+            actual_samples = np.random.poisson(desired_samples)
+        else:
+            actual_samples = desired_samples
+        
+        # Pre-allocate space for samples
+        samples = np.empty((actual_samples, 2))
+        sample_count = 0
+
+        # Run an inital batch to estimate the acceptance rate the dynamic batch size on
+        # Generates smaller batches: X, Y, Uniform Random, True Values
+        batch_X = np.random.uniform(self.lower_bound_X, self.upper_bound_X, size=init_batch_size)
+        batch_Y = np.random.uniform(self.lower_bound_Y, self.upper_bound_Y, size=init_batch_size)
+        batch_uniform = np.random.uniform(0, self.max_pdf, size=init_batch_size)
+        batch_true_vals = self.pdf(batch_X, batch_Y)
+
+        # Compare Uniform Random to find the accepted samples, where within pdf
+        # Each index is a boolean value
+        batch_accept_index = batch_uniform <= batch_true_vals
+
+        # Collect x and y samples that are accepted
+        accepted_samples = np.array([batch_X[batch_accept_index], batch_Y[batch_accept_index]]).T
+
+        # Add samples to overall score the samples array with the accepted samples
+        num_accepted = len(accepted_samples)
+        samples[:num_accepted] = accepted_samples
+        sample_count += num_accepted
+
+
+        # Estimate acceptance rate
+        # Use np.sum to count the number of True values in the array
+        acceptance_rate = num_accepted/ init_batch_size
+        print(f"The initial batch acceptance rate is: {acceptance_rate}")
+
+
+        # While samples is less than desired number - produce samples to account for acceptance rate
+        # Generate samples in batches until the desired number of samples is reached - ideally in 1 batch
+        while sample_count < actual_samples:
+            # Calculate the remaining desired samples
+            remain_actual_samples = actual_samples - sample_count
+            # Calculate the batch size to generate based on remaining samples and acceptance rate
+            # A maximum batch size, 500000, is set to prevent overloading memory
+            # A 10% buffer is added to the batch size to ensure enough samples are generated
+            batch_size = min(int(1.1*(remain_actual_samples / acceptance_rate)), max_batch_size)
+
+            # Generate a new batch of proposals using the same method as above
+            batch_X = np.random.uniform(self.lower_bound_X, self.upper_bound_X, size=batch_size)
+            batch_Y = np.random.uniform(self.lower_bound_Y, self.upper_bound_Y, size=batch_size)
+            batch_uniform = np.random.uniform(0, self.max_pdf, size=batch_size)
+            batch_true_vals = self.pdf(batch_X, batch_Y)
+            batch_accept_index = batch_uniform <= batch_true_vals
+            accepted_samples = np.array([batch_X[batch_accept_index], batch_Y[batch_accept_index]]).T
+
+            num_accepted = len(accepted_samples)
+            remaining_space = actual_samples - sample_count
+
+            # Ensure the number of items added does not exceed the remaining space
+            if num_accepted > remaining_space:
+                samples[sample_count:] = accepted_samples[:remaining_space]
+                sample_count += remaining_space
+            else:
+                samples[sample_count:sample_count + num_accepted] = accepted_samples
+                sample_count += num_accepted
+            
+            print(f"Accepted {num_accepted} out of {batch_size} samples in batch, total: {sample_count}")
+
+        if save_to_class:
+            # Store to the class 
+            self.samples = samples
+
+        return samples
+    
+    def plot_samples(self):
+        """
+        Plot the results of the sampled data in a 2x2 grid:
+        - Top-left: 3D histogram of the joint distribution
+        - Top-right: Surface plot of the joint PDF
+        - Bottom-left: Histogram of sampled X vs marginal PDF
+        - Bottom-right: Histogram of sampled Y vs marginal PDF
+        """
+        if self.samples is None:
+            raise ValueError("No samples have been generated. Please run the `accept_reject_sample` method first.")
+        
+        # Define ranges for X and Y based on bounds
+        X = np.linspace(self.lower_bound_X - 0.1*(self.upper_bound_X - self.lower_bound_X), self.upper_bound_X+ 0.1*(self.upper_bound_X - self.lower_bound_X), 1000)
+        Y = np.linspace(self.lower_bound_Y- 0.1*(self.upper_bound_Y - self.lower_bound_Y), self.upper_bound_Y+ 0.1*(self.upper_bound_Y - self.lower_bound_Y), 1000)
+
+        # Compute the PDF grid for plotting
+        X_grid, Y_grid = np.meshgrid(X, Y)
+        Z = self.pdf(X_grid, Y_grid)
+
+        # Import samples from the class
+        samples = self.samples
+
+        # Set consistent font sizes
+        label_fontsize = 18
+        title_fontsize = 18
+        tick_fontsize = 16
+
+        fig = plt.figure(figsize=(14, 14))
+        # Create a 2x2 grid of plots
+        spec = gridspec.GridSpec(2, 2, width_ratios=[1, 1], height_ratios=[1, 1.1])
+
+        # Top left: 3D histogram of samples, using similiar colour map scheme to pdf plot
+        ax1 = fig.add_subplot(spec[0, 0], projection='3d')
+        hist, xedges, yedges = np.histogram2d(samples[:, 0], samples[:, 1], bins=30, 
+                                            range=[[self.lower_bound_X, self.upper_bound_X], 
+                                                    [self.lower_bound_Y, self.upper_bound_Y]])
+        xpos, ypos = np.meshgrid(xedges[:-1], yedges[:-1], indexing="ij")
+        xpos, ypos = xpos.ravel(), ypos.ravel()
+        zpos = np.zeros_like(xpos)
+        dx = dy = (xedges[1] - xedges[0])
+        dz = hist.ravel()
+
+        # Apply colormap
+        cmap = get_cmap('viridis')
+        norm = Normalize(vmin=dz.min(), vmax=dz.max())
+        colors = cmap(norm(dz))
+
+        ax1.bar3d(xpos, ypos, zpos, dx, dy, dz, shade=True, color=colors)
+        ax1.set_xlabel("X", fontsize=label_fontsize)
+        ax1.set_ylabel("Y", fontsize=label_fontsize)
+        ax1.set_zlabel("Frequency", fontsize=label_fontsize, labelpad = 20)
+        ax1.tick_params(axis='both', labelsize=tick_fontsize)
+        ax1.view_init(elev=30, azim=60)
+        ax1.set_title("3D Histogram of Joint Distribution", fontsize=title_fontsize)
+
+        # Top-right: Surface plot of the joint PDF for comparison with histogram in top-left
+        ax2 = fig.add_subplot(spec[0, 1], projection='3d')
+        ax2.plot_surface(X_grid, Y_grid, Z, cmap='viridis', alpha=0.9)
+        ax2.set_xlabel("X", fontsize=label_fontsize)
+        ax2.set_ylabel("Y", fontsize=label_fontsize, labelpad = 10)
+        ax2.set_zlabel("PDF Value", fontsize=label_fontsize, labelpad = 20)
+        ax2.tick_params(axis='both', labelsize=tick_fontsize)
+        ax2.view_init(elev=30, azim=60)
+        ax2.set_title("Surface Plot of True Joint PDF", fontsize=title_fontsize)
+
+        # Bottom-left: Histogram of X values vs marginal PDF in X
+        ax3 = fig.add_subplot(spec[1, 0])
+        hist_X, bins_X, _ = ax3.hist(samples[:, 0], bins=30, density=True, alpha=0.5, color='navy', label="Sampled X")
+        bin_centers_X = 0.5 * (bins_X[:-1] + bins_X[1:])
+        # Can ignore the signal and background contribution given (_) as they are not used
+        _, _, marginal_total_X = self.marginal_pdf_x(X)
+        ax3.plot(X, marginal_total_X, label="Marginal PDF X", color="red", linewidth=4)
+        ax3.set_xlim(X[0], X[-1])
+        ax3.set_xlabel("X", fontsize=label_fontsize)
+        ax3.set_ylabel("Density", fontsize=label_fontsize)
+        ax3.tick_params(axis='both', labelsize=tick_fontsize)
+        ax3.legend(fontsize=label_fontsize)
+        ax3.set_title("Histogram of X with Marginal PDF of X", fontsize=title_fontsize)
+
+        # Bottom-right: Histogram of samples Y values vs marginal PDF in Y
+        ax4 = fig.add_subplot(spec[1, 1])
+        hist_Y, bins_Y, _ = ax4.hist(samples[:, 1], bins=30, density=True, alpha=0.5, color='navy', label="Sampled Y")
+        bin_centers_Y = 0.5 * (bins_Y[:-1] + bins_Y[1:])
+        # Can ignore the signal and background contribution given (_) as they are not used
+        _, _, marginal_total_Y = self.marginal_pdf_y(Y)
+        ax4.plot(Y, marginal_total_Y, label="Marginal PDF Y", color="red", linewidth=4)
+        ax4.set_xlim(Y[0], Y[-1])
+        ax4.set_xlabel("Y", fontsize=label_fontsize)
+        ax4.set_ylabel("Density", fontsize=label_fontsize)
+        ax4.tick_params(axis='both', labelsize=tick_fontsize)
+        ax4.legend(fontsize=label_fontsize)
+        ax4.set_title("Histogram of Y with Marginal PDF of X", fontsize=title_fontsize)
+
+        plt.tight_layout()
+        plt.show()
+    
+    
     def pdf_fitting(self, X, Y, mu, sigma, beta, m, lamb, mu_b, sigma_b, f):
         """
         Calculate the joint Probability Density Function (PDF) for given parameters.
@@ -686,11 +685,10 @@ class Signal_Background:
         np.ndarray
             PDF values for the input X, Y.
         """
-        signal_pdf = f * self.Signal.pdf_fitting(X, Y, mu, sigma, beta, m, lamb)
-        background_pdf = (1 - f) * self.Background.pdf_fitting(X, Y, mu_b, sigma_b)
-        return signal_pdf + background_pdf
+        return f * self.Signal.pdf_fitting(X, Y, mu, sigma, beta, m, lamb) + (1 - f) * self.Background.pdf_fitting(X, Y, mu_b, sigma_b)
     
-    def fit_params(self, initial_params, samples = None):
+    
+    def fit_params(self, initial_params, samples = None, print_results = False, save_to_class = False):
         """
         Perform an extended maximum likelihood fit using `iminuit`.
 
@@ -755,12 +753,14 @@ class Signal_Background:
 
         # Run the error analysis
         mi.hesse()
-
-        # Save to class
-        self.mi = mi
-        
-        return mi
+        if save_to_class:
+            # Save to class
+            self.mi = mi
+        if print_results:
+            print(mi)
+        return mi.values, mi.errors
     
+
     def fit_params_results(self):
         """
         Print the results of the fit along with the true values and how many standard errors
@@ -772,7 +772,12 @@ class Signal_Background:
             The Minuit object containing the fit results.
         """
 
-        # Define parameter grouping
+        # check data has actually been fitted to and results are available
+        if not hasattr(self, "mi"):
+            raise ValueError("Minuit object not available. Please run fit_params first.")
+
+        # Define parameter parent distributions for the table
+        # stored in the list format (parent distribution(group), name, fitted value, error, true value)=
         params_table = [
             # Crystal Ball parameters
             ("Crystal Ball (Signal)", "mu", self.mi.values["mu"], self.mi.errors["mu"], self.mu),
@@ -789,18 +794,234 @@ class Signal_Background:
             ("Overall", "N", self.mi.values["N"], self.mi.errors["N"], None), 
         ]
 
+        # Create a dictionary to store the fitting results within the class simultaneously
+        self.fit_results = {}
+
+
         # Add columns for "Value ± Error" and "Number of Standard Errors Away"
         formatted_table = []
         for group, name, value, error, true_val in params_table:
+
+            # Save the results to the overall class dictionary
+            self.fit_results[name] = {"value": value, "error": error, "distribution": group}
+
+            # String of the value with error
             value_with_error = f"{value:.4f} ± {error:.4f}"
+
+            # Calculate the number of standard errors away from the true value
             if true_val is not None:
                 num_std_errs = abs(value - true_val) / error
             else:
                 num_std_errs = "N/A"
+
+            # Append the formatted row to the table
             formatted_table.append([group, name, value_with_error, true_val, num_std_errs])
 
-        # Define table headers
+        # Declare the table's headers
         headers = ["Distribution", "Parameter", "Value ± Error", "True Value", "Std Errors Away"]
 
         # Print the table
         print(tabulate(formatted_table, headers=headers, floatfmt=".4f", tablefmt="pretty"))
+
+        # Get the correlation matrix and parameter names using mi from minuit object
+        correlation_matrix = self.mi.covariance.correlation()
+        parameters = self.mi.parameters
+
+        fig, ax = plt.subplots(figsize=(8, 8))  
+        # Plot the heatmap
+        cax = ax.matshow(correlation_matrix, cmap='coolwarm', vmin=-1, vmax=1)
+
+        # Add a colorbar
+        cbar = plt.colorbar(cax, fraction=0.046, pad=0.04)
+        cbar.ax.tick_params(labelsize=14)  
+
+        # Add labels
+        ax.set_xticks(range(len(parameters)))
+        ax.set_yticks(range(len(parameters)))
+        ax.set_xticklabels(parameters, fontsize=14, rotation=45) 
+        ax.set_yticklabels(parameters, fontsize=14)
+
+        # Display values in the cells of the coloured heat map
+        for (i, j), val in np.ndenumerate(correlation_matrix):
+            ax.text(j, i, f'{val:.2f}', ha='center', va='center', color='black', fontsize=12)
+
+        plt.tight_layout()
+        plt.show()
+
+ 
+    # def plot_profiled_likelihoods(self):
+    #     """
+    #     Plot the profiled log-likelihood for each parameter in a 3x3 grid.
+    #     The x-axis is scanned over the fitted parameter value ± 2.5σ, and the y-axis is the -2 log-likelihood.
+    #     Store the 1σ confidence intervals (lhs and rhs deviations) for each parameter in the class.
+    #     """
+
+    #     if not hasattr(self, "mi"):
+    #         raise ValueError("Fit has not been performed. Run fit_params() first.")
+
+    #     # Initialize storage for profiled errors
+    #     self.profiled_errors = {}
+
+    #     # Extract parameter values, errors, and names
+    #     params = self.mi.parameters
+    #     values = self.mi.values
+    #     errors = self.mi.errors
+
+    #     # Define LaTeX labels for each parameter
+    #     param_labels = {
+    #         "mu": r"$\mu$",
+    #         "sigma": r"$\sigma$",
+    #         "beta": r"$\beta$",
+    #         "m": r"$m$",
+    #         "lamb": r"$\lambda$",
+    #         "mu_b": r"$\mu_b$",
+    #         "sigma_b": r"$\sigma_b$",
+    #         "f": r"$f$",
+    #         "N": r"$N$"
+    #     }
+
+    #     # Create a 3x3 grid for plotting
+    #     fig, axes = plt.subplots(3, 3, figsize=(15, 15))
+    #     axes = axes.flatten()
+
+    #     # Loop over all parameters
+    #     for i, (param, value, error) in enumerate(zip(params, values, errors)):
+    #         ax = axes[i]
+
+    #         # Define the range to scan: ±2.5σ
+    #         scan_range = np.linspace(value - 2.5 * error, value + 2.5 * error, 25)
+    #         nlls = []
+
+    #         # Compute the profiled likelihood
+    #         for scan_value in scan_range:
+    #             self.mi.values[param] = scan_value
+    #             self.mi.fixed[param] = True  # Fix the parameter being profiled
+    #             self.mi.migrad()  # Run minimization
+    #             nlls.append(self.mi.fval)
+
+    #         # Reset parameter to be free
+    #         self.mi.fixed[param] = False
+    #         self.mi.values[param] = value
+
+    #         # Shift NLL values so the minimum is 0
+    #         nlls = np.array(nlls) - np.min(nlls)
+
+    #         # Plot the likelihood
+    #         ax.plot(scan_range, nlls, color='blue', label=r"$-2\ln\mathcal{L}$", linewidth=2)
+
+    #         # Find 1σ (ΔlnL = 0.5) confidence intervals
+    #         lhs_1sigma = scan_range[np.where(nlls <= 0.5)[0][0]]
+    #         rhs_1sigma = scan_range[np.where(nlls <= 0.5)[0][-1]]
+
+    #         # Store the deviations (distances) from the central value
+    #         self.profiled_errors[param] = {
+    #             "lhs_1sigma": lhs_1sigma - value,  # Difference on the left
+    #             "rhs_1sigma": rhs_1sigma - value  # Difference on the right
+    #         }
+
+    #         # Plot shaded regions for 1σ and 2σ
+    #         ax.fill_between(
+    #             scan_range,
+    #             0, 0.5,
+    #             where=(nlls <= 0.5),
+    #             color='green',
+    #             alpha=0.3,
+    #             label=r"$1\sigma$ interval"
+    #         )
+    #         ax.fill_between(
+    #             scan_range,
+    #             0, 2.0,
+    #             where=(nlls <= 2.0),
+    #             color='red',
+    #             alpha=0.3,
+    #             label=r"$2\sigma$ interval"
+    #         )
+
+    #         # Add horizontal lines for ΔlnL = 0.5 and 2
+    #         ax.axhline(0.5, color='black', linestyle='--', linewidth=1)
+    #         ax.axhline(2.0, color='black', linestyle='--', linewidth=1)
+
+    #         # Add text for the horizontal lines
+    #         ax.text(scan_range[0], 0.5, r"$\Delta\ln\mathcal{L} = 0.5$", fontsize=10, verticalalignment='bottom')
+    #         ax.text(scan_range[0], 2.0, r"$\Delta\ln\mathcal{L} = 2.0$", fontsize=10, verticalalignment='bottom')
+
+    #         # Set labels and font sizes
+    #         ax.set_xlabel(param_labels.get(param, param), fontsize=14)
+    #         ax.set_ylabel(r"$-2\ln\mathcal{L}$", fontsize=14)
+    #         ax.tick_params(axis='both', which='major', labelsize=12)
+
+    #         # Adjust x-ticks for better visibility (especially for "N")
+    #         if param == "N":
+    #             ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x:.1e}"))
+    #             for label in ax.get_xticklabels():
+    #                 label.set_fontsize(10)
+
+    #     # Remove unused subplots
+    #     for j in range(len(params), len(axes)):
+    #         fig.delaxes(axes[j])
+
+    #     # Add a single legend to the first subplot
+    #     axes[0].legend(fontsize=12)
+
+    #     # Adjust layout
+    #     plt.tight_layout()
+    #     plt.show()
+
+    def param_bootstrap_data(self, n_samples, n_iterations, initial_params):
+        """
+        Perform a parametric bootstrap analysis for multiple sample sizes.
+
+        Parameters
+        ----------
+        n_samples : list
+            Array of sample sizes (e.g., [250, 500, 1000, ...]).
+        n_iterations : int
+            Number of bootstrap iterations for each sample size.
+        initial_params : list
+            Initial guesses for the parameters [mu, sigma, beta, m, lamb, mu_b, sigma_b, f, N].
+
+        Returns
+        -------
+        None
+            Saves combined results (values and errors, including N) to `.npy` files for each sample size.
+        """
+        # The resultant data from this method is going to be stored in the `Bootstrap_Results` directory
+        # Create the directory if it doesn't exist
+        if not os.path.exists("Bootstrap_Results"):
+            os.makedirs("Bootstrap_Results")
+        # If the directory already exists, remove all files and subdirectories
+        else:
+            for filename in os.listdir("Bootstrap_Results"):
+                file_path = os.path.join("Bootstrap_Results", filename)
+                if os.path.isfile(file_path) or os.path.islink(file_path):
+                        os.unlink(file_path)  
+
+        # Define the number of parameters (including N)
+        num_params = len(initial_params) + 1
+
+        for n in tqdm(n_samples, desc="Sample Sizes"):
+            # Generate all toy datasets at once
+            toys = [ self.accept_reject_sample(desired_samples=n, poisson=True, save_to_class=False) for _ in range(n_iterations) ]
+
+            # Add the actual number of samples (N) as the last value in initial_params
+            current_initial_params = initial_params.copy()
+            current_initial_params.extend(n)
+
+            # Allocate a 3D array for results: (n_iterations, 2, num_params)
+            # Axis 0: n_iterations
+            # Axis 1: 0 for values, 1 for errors
+            # Axis 2: num_params [mu, sigma, beta, m, lamb, mu_b, sigma_b, f, N]
+            results = np.empty((n_iterations, 2, num_params))  
+
+            # Loop over all bootstrap toys 
+            for i, toy in tqdm(enumerate(toys), desc=f"Bootstrap Iterations for n={n}", leave=False, total=n_iterations):
+                # Fit parameters using `fit_params`
+                fit_values, fit_errors = self.fit_params(initial_params=current_initial_params, samples=toy)
+                # Store values in results[i, 0, :]
+                results[i, 0, :] = list(fit_values.values())
+                # Store errors in results[i, 1, :]
+                results[i, 1, :] = list(fit_errors.values())
+
+            # Save the combined results to a `.npy` file in 
+            np.save(f"Samples/Bootstrap_results_{n}.npy", results)
+            print(f"Saved combined results for n_samples={n} to .npy file.")
