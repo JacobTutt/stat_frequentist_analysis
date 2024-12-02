@@ -734,15 +734,6 @@ class Signal_Background:
         initial_params : list of float
             Initial guesses for the model parameters in the order:
             [mu, sigma, beta, m, lamb, mu_b, sigma_b, f, N_expected].
-            - `mu` : Mean of the signal distribution.
-            - `sigma` : Standard deviation of the signal distribution.
-            - `beta` : Threshold parameter of the signal's Crystal Ball distribution.
-            - `m` : Power-law tail exponent of the signal's Crystal Ball distribution.
-            - `lamb` : Decay constant of the signal's exponential distribution.
-            - `mu_b` : Mean of the background's normal distribution.
-            - `sigma_b` : Standard deviation of the background's normal distribution.
-            - `f` : Fraction of signal events in the mixture.
-            - `N_expected` : Expected total number of events in the data.
 
         samples : np.ndarray, optional
             Observed data points of shape (N, 2), where each row represents a pair of (X, Y) values.
@@ -772,13 +763,6 @@ class Signal_Background:
         Notes
         -----
         - Parameter limits are set based on physical significance and distribution constraints:
-            - `sigma > 0`
-            - `beta > 0`
-            - `m > 1`
-            - `lamb > 0`
-            - `sigma_b > 0`
-            - `f` in [0, 1]
-            - `N_expected > 0`
         - The fit includes an error analysis using the `Hesse` algorithm to estimate parameter uncertainties.
         - The `iminuit` object provides detailed information about the fit, including parameter correlations.
         """
@@ -1578,7 +1562,7 @@ class Signal_Background:
         # Return the results dictionary
         return results
 
-    def fit_params_x(self, initial_params, samples = None, print_results = False):
+    def fit_params_sWeights(self, initial_params, samples = None, print_results = False, norm_check = True):
         # Allow for the samples to be passed in, if not try use the samples already generated in class
         if samples is None:
             samples = self.samples
@@ -1604,7 +1588,7 @@ class Signal_Background:
 
         # Create the Minuit object with initial guesses
         mi_x = Minuit(neg_log_likelihood_x, mu=initial_params[0],sigma=initial_params[1], beta=initial_params[2], 
-                    m=initial_params[3], f=initial_params[4], N=initial_params[5])
+                    m=initial_params[3], f=initial_params[4], N=initial_params[6])
 
         # Set parameter limits based on each paramaters restrictions and physical significance
         # sigma > 0
@@ -1637,12 +1621,11 @@ class Signal_Background:
             return self.Background.X.pdf_fitting(x)
         
         
-
         # Calculate the signal and background weights using the SWeight method
         signal_count  = mi_x.values["N"] * mi_x.values["f"]
         background_count = mi_x.values["N"] * (1 - mi_x.values["f"])
         xrange = (self.lower_bound_X, self.upper_bound_X)
-        sweighter = SWeight( samples_x, pdfs=[signal_x_pdf_fit,background_x_pdf_fit], yields=[signal_count,background_count], discvarranges=((xrange),) )
+        sweighter = SWeight( samples_x, pdfs=[signal_x_pdf_fit,background_x_pdf_fit], yields=[signal_count,background_count], discvarranges=((xrange),), checks = norm_check)
         signal_weight = sweighter.get_weight(0,samples_x)
         background_weight = sweighter.get_weight(1,samples_x)
     
@@ -1665,20 +1648,27 @@ class Signal_Background:
         cy = 0.5*(ye[1:]+ye[:-1])
 
         if print_results:
-            fig, ax = plt.subplots(1, 2, figsize=(0.8*12.8, 0.8*4.8))
+            fig, ax = plt.subplots(figsize=(8, 8))
 
-            ax[0].errorbar( cy, ysw, ysw2**0.5, fmt='rx', label='Weighted')
-            ax[0].plot(cy, (ye[2]-ye[1]) * mi_x.values["N"]* mi_x.values["f"] * self.Signal.Y.pdf(cy))
-            ax[0].legend()
-            ax[0].set_xlabel('$Y$')
+            # Plot the weighted histogram with error bars
+            ax.errorbar(cy, ysw, yerr=ysw2**0.5, fmt='rx', label='Weighted')
 
-            fig.show()
+            # Plot the expected PDF curve
+            ax.plot(cy, (ye[2]-ye[1]) * mi_x.values["N"] * mi_x.values["f"] * self.Signal.Y.pdf(cy), label='True PDF')
+
+            # Add labels and legend
+            ax.legend()
+            ax.set_xlabel('$Y$')
+            ax.set_ylabel('Counts')
+
+            # Display the plot
+            plt.show()
 
         def cdf_signal_y(x, lamb):
             return self.Signal.Y.cdf_fitting(x, lamb)
         
         neg_log_likelihood_signal_y_binned = BinnedNLL(ysw, ye, cdf_signal_y)
-        mi_signal_y = Minuit(neg_log_likelihood_signal_y_binned, lamb=initial_params[6])
+        mi_signal_y = Minuit(neg_log_likelihood_signal_y_binned, lamb=initial_params[5])
 
         # Limit lamb > 0
         mi_signal_y.limits["lamb"] = (1e-3, None)
@@ -1686,112 +1676,98 @@ class Signal_Background:
         mi_signal_y.migrad()
         if not mi_signal_y.valid:
             raise RuntimeError("Minimisation in Y did not converge")
-
+        
         # Run the error analysis
         mi_signal_y.hesse()
 
         if print_results:
             print(mi_signal_y)
 
-        return mi_x.value, mi_ mi_signal_y
+        # Explicitly construct dictionaries from ValueView objects
+        mi_x_values_dict = {key: mi_x.values[key] for key in mi_x.parameters}
+        mi_signal_y_values_dict = {key: mi_signal_y.values[key] for key in mi_signal_y.parameters}
+        mi_x_errors_dict = {key: mi_x.errors[key] for key in mi_x.parameters}
+        mi_signal_y_errors_dict = {key: mi_signal_y.errors[key] for key in mi_signal_y.parameters}
+        mi_total_values = {**mi_x_values_dict, **mi_signal_y_values_dict}
+        mi_total_errors = {**mi_x_errors_dict, **mi_signal_y_errors_dict}
+
+        return mi_total_values, mi_total_errors
+
+    def param_bootstrap_sWeights_fit(self,initial_params, norm_check = True,  input_directory="Bootstrap/Samples", output_directory="Bootstrap/sWeights/Results"):
+
+            # Ensure the output directory exists and is empty
+            if os.path.exists(output_directory):
+                shutil.rmtree(output_directory)
+            os.makedirs(output_directory)
+
+            # Repeat for all files in the input directory
+            for file_name in os.listdir(input_directory):
+                # Ensure it is a numpy file - ie the samples
+                if file_name.endswith(".npy"):
+                    # Extract the sample size and number samples from the file name
+                    match = re.search(r"Samples_No_(\d+)_BaseSize_(\d+).npy", file_name)
+                    if not match:
+                        continue
+                    num_samples = int(match.group(1))
+                    sample_size = int(match.group(2))
+
+                    print(f"Processing bootstrap samples of size {sample_size} using sWeights...")
+
+                    # Load the bootstrap samples data from the file
+                    file_path = os.path.join(input_directory, file_name)
+                    samples = np.load(file_path, allow_pickle=True) 
+
+                    # Add the Base sample size to the initial parameters as the expected number of events
+                    initial_params_samples = initial_params.copy()
+                    initial_params_samples.append(sample_size)
+                    num_params = len(initial_params_samples)
+                    
+                    # Pre define arrays to store the results for faster computation
+                    values = np.full((num_samples, num_params), np.nan)
+                    errors = np.full((num_samples, num_params), np.nan)
+                    non_converged_count = 0
+
+                    # Repeat parameter fitting for each sample in the file
+                    for i, sample in enumerate(samples):
+                        try:
+                            # Perform the parameter fitting using `fit_params`
+                            fit_results, fit_errors = self.fit_params_sWeights(initial_params_samples, sample, norm_check = norm_check)
+                            values[i] = np.array(list(fit_results.values()))
+                            errors[i] = np.array(list(fit_errors.values()))
+
+                        except Exception as e:
+                            # If fitting fails, log the failure and continue
+                            print(f"Sample {i + 1} (size {sample_size}) did not converge")
+                            print(e)
+                            non_converged_count += 1
+
+                    # Combine results into a single array
+                    results = np.array([values, errors])
+
+                    # Save the results to the file file
+                    output_file_name = f"ParamResults_No_{num_samples}_BaseSize_{sample_size}.npy"
+                    output_file_path = os.path.join(output_directory, output_file_name)
+                    np.save(output_file_path, results, allow_pickle=True)
+
+                    print(f"In total {non_converged_count} samples did not converge out of {num_samples}.")
+                    print(f"Results saved to {output_file_path}\n ")
 
 
-
-    def fit_params_x_results(self):
-        """
-        Print the results of the fit along with the true values and how many standard errors
-        the fitted values are away from the true values.
-
-        Parameters
-        ----------
-        mi : Minuit
-            The Minuit object containing the fit results.
-        """
-
-        # check data has actually been fitted to and results are available
-        if not hasattr(self, "mi"):
-            raise ValueError("Minuit object not available. Please run fit_params first.")
-
-        # Define parameter parent distributions for the table
-        # stored in the list format (parent distribution(group), name, fitted value, error, true value)=
-        params_table = [
-            # Crystal Ball parameters
-            ("Crystal Ball (Signal)", "mu", self.mi_x.values["mu"], self.mi_x.errors["mu"], self.true_params[0]),
-            ("Crystal Ball (Signal)", "sigma", self.mi_x.values["sigma"], self.mi_x.errors["sigma"], self.true_params[1]),
-            ("Crystal Ball (Signal)", "beta", self.mi_x.values["beta"], self.mi_x.errors["beta"], self.true_params[2]),
-            ("Crystal Ball (Signal)", "m", self.mi_x.values["m"], self.mi_x.errors["m"], self.true_params[3]),
-            # Overall parameters
-            ("Overall", "f", self.mi_x.values["f"], self.mi_x.errors["f"], self.true_params[7]),
-            ("Overall", "N", self.mi_x.values["N"], self.mi_x.errors["N"], None), 
-        ]
-
-        # Create a dictionary to store the fitting results within the class simultaneously
-        self.fit_results_x = {}
+    def param_bootstrap_sWeights_analysis(self, input_directory="Bootstrap/sWeights/Results", output_directory="Bootstrap/sWeights/Plots"):
 
 
-        # Add columns for "Value ± Error" and "Number of Standard Errors Away"
-        formatted_table = []
-        for group, name, value, error, true_val in params_table:
-
-            # Save the results to the overall class dictionary
-            self.fit_results_x[name] = {"value": value, "error": error, "distribution": group}
-
-            # String of the value with error
-            value_with_error = f"{value:.4f} ± {error:.4f}"
-
-            # Calculate the number of standard errors away from the true value
-            if true_val is not None:
-                num_std_errs = abs(value - true_val) / error
-            else:
-                num_std_errs = "N/A"
-
-            # Append the formatted row to the table
-            formatted_table.append([group, name, value_with_error, true_val, num_std_errs])
-
-        # Declare the table's headers
-        headers = ["Distribution", "Parameter", "Value ± Error", "True Value", "Std Errors Away"]
-
-        # Print the table
-        print(tabulate(formatted_table, headers=headers, floatfmt=".4f", tablefmt="pretty"))
-
-        # Get the correlation matrix and parameter names using mi from minuit object
-        correlation_matrix = self.mi_x.covariance.correlation()
-        parameters = self.mi_x.parameters
-
-        fig, ax = plt.subplots(figsize=(8, 8))  
-        # Plot the heatmap
-        cax = ax.matshow(correlation_matrix, cmap='coolwarm', vmin=-1, vmax=1)
-
-        # Add a colorbar
-        cbar = plt.colorbar(cax, fraction=0.046, pad=0.04)
-        cbar.ax.tick_params(labelsize=14)  
-
-        # Add labels
-        ax.set_xticks(range(len(parameters)))
-        ax.set_yticks(range(len(parameters)))
-        ax.set_xticklabels(parameters, fontsize=14, rotation=45) 
-        ax.set_yticklabels(parameters, fontsize=14)
-
-        # Display values in the cells of the coloured heat map
-        for (i, j), val in np.ndenumerate(correlation_matrix):
-            ax.text(j, i, f'{val:.2f}', ha='center', va='center', color='black', fontsize=12)
-
-        plt.tight_layout()
-        plt.show()
-
-    def param_x_bootstrap_sweight_analysis(self, input_directory="Bootstrap_Results"):
+        # LaTeX labels for parameters - for use on plot axis
         param_labels = {
             "mu": r"$\mu$",
             "sigma": r"$\sigma$",
             "beta": r"$\beta$",
             "m": r"$m$",
+            "f" : r"$f$",
+            "N": r"$N$",
             "lamb": r"$\lambda$",
-            "mu_b": r"$\mu_b$",
-            "sigma_b": r"$\sigma_b$",
-            "f": r"$f$",
-            "N": r"$N$"
         }
 
+        # Standard preferences for plots
         plot_config = {
             "xlabel_fontsize": 16,
             "ylabel_fontsize": 16,
@@ -1805,29 +1781,50 @@ class Signal_Background:
             "region_alpha": 0.3,  # Transparency for shaded regions
             "text_boxstyle": dict(boxstyle="round", facecolor="white", edgecolor="gray"),  # Box for μ, σ text
         }
-            
 
-        results = {}  # Dictionary to store all results
+        # Clear and recreate the output directories for plots
+        for data_label in ["Value", "Error", "Pull"]:
+            sub_dir = f"{output_directory}/{data_label}_Histograms"
+            if os.path.exists(sub_dir):
+                shutil.rmtree(sub_dir)  
+            os.makedirs(sub_dir) 
+            
+        sub_dir = f"{output_directory}/Trends_with_Samples_Size"
+        if os.path.exists(sub_dir):
+            shutil.rmtree(sub_dir) 
+        os.makedirs(sub_dir)  
+
+        sub_dir = f"{output_directory}/Pull_Plots"
+        if os.path.exists(sub_dir):
+            shutil.rmtree(sub_dir) 
+        os.makedirs(sub_dir) 
+
+        # Initialise the results dictionary
+        results = {} 
+
+        # Loop over each file in the input directory - storing the results of paraemter fitting
         for filename in os.listdir(input_directory):
             if filename.endswith(".npy"):
-                # Extract the sample size from the filename
-                match = re.search(r"Bootstrap_results_(\d+).npy", filename)
+                match = re.search(r"ParamResults_No_(\d+)_BaseSize_(\d+).npy", filename)
                 if match:
-                    sample_size = int(match.group(1))
-                    print(f"Processing sample size: {sample_size}")
+                    sample_size = int(match.group(2))
+                    print(f"Processing sWeights fitted sample size: {sample_size}")
 
+                # Load the data from the file
                 filepath = os.path.join(input_directory, filename)
                 data = np.load(filepath)
-
                 Values = data[0]
                 Errors = data[1]
 
-                Truth = self.true_params.copy()
-                Truth.append(sample_size)
-                Truth = np.array(Truth)
 
+                # Calculate the true values for the sample size - using class stored and the samples size from file name
+                Truth = [self.true_params[i] for i in [0, 1, 2, 3, 7]]
+                Truth.append(sample_size)
+                Truth.append(self.true_params[4])
+                Truth = np.array(Truth)
                 Pull = (Values - Truth) / Errors
 
+                # Calculate the mean and standard deviation of the values, errors, and pulls
                 calc_values = {
                     "Values_Mean": np.nanmean(Values, axis=0),
                     "Values_Std": np.nanstd(Values, axis=0),
@@ -1840,34 +1837,38 @@ class Signal_Background:
                     "Pull_Std_Error": np.nanstd(Pull, axis=0) / np.sqrt(2 * Pull.shape[0]),  # Error on pull std
                 }
 
-                # Store calc_values in the results dictionary
+                # Add the calculated results to the results dictionary under key of sample size
                 results[sample_size] = calc_values
 
-                # Dictionary to map labels to data arrays
+                # Dictionary to map labels to data arrays for plotting efficiency
                 data_types = {
                     "Value": Values,
                     "Error": Errors,
-                    "Pull": Pull,
-                }
+                    "Pull": Pull,}
                                 
                 # Create Pull Distribution Plots
 
                 # Loop over data types: Values, Errors, and Pulls
                 for data_label, data_array in data_types.items():
-                    sub_dir = f"{output_directory}/{data_label}"
+                    # Each are saves to a separate subdirectory
+                    sub_dir = f"{output_directory}/{data_label}_Histograms"
                     num_params = data_array.shape[1]
+
+                    # Create a 3x3 grid for plotting histograms
                     fig, axes = plt.subplots(3, 3, figsize=(15, 15))
                     axes = axes.flatten()
-
+                    
+                    # Loop over each parameter and plot its histogram in each subplot in the grid
                     for i in range(num_params):
                         param_values = data_array[:, i]
                         param_values = param_values[~np.isnan(param_values)]
 
-                        # Use precomputed mean and std
-                        mu = np.nanmean(param_values)
-                        std = np.nanstd(param_values)
+                        # Remove the last 2% and top 2% of values
+                        lower_limit = np.percentile(param_values, 2)
+                        upper_limit = np.percentile(param_values, 98)
+                        param_values = param_values[(param_values >= lower_limit) & (param_values <= upper_limit)]
 
-                        # Determine histogram and its error characteristics
+                        # Find the histogram characterists and the error on each bar
                         bins = np.histogram_bin_edges(param_values, bins=15)
                         hist, bin_edges = np.histogram(param_values, bins=bins)
                         bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
@@ -1879,6 +1880,10 @@ class Signal_Background:
                         ax.bar(bin_centers, hist, width=bin_widths, alpha=0.6, label='Histogram', color='blue', edgecolor='black')
                         ax.errorbar(bin_centers, hist, yerr=hist_errors, fmt='k.', capsize=3, label='Error Bars')
 
+                        # Calculate mean and std for gaussian
+                        mu = np.nanmean(param_values)
+                        std = np.nanstd(param_values)
+
                         # Compute Gaussian PDF
                         x = np.linspace(mu - 3 * std, mu + 3 * std, 100)
                         pdf = norm.pdf(x, mu, std)
@@ -1887,12 +1892,12 @@ class Signal_Background:
                         pdf_scaled = pdf * np.sum(hist) * bin_widths[0]
                         ax.plot(x, pdf_scaled, 'r-', label='Gaussian Fit')
 
-                        # Add titles and labels using param_labels
-                        param_name = list(param_labels.keys())[i]  # Map index to parameter name
-                        param_label = param_labels.get(param_name, f"Param {i + 1}")  # Default to generic name if not found
+                        # Add labels using param_labels dictioanry
+                        param_name = list(param_labels.keys())[i]  
+                        param_label = param_labels.get(param_name, f"Param {i + 1}")  
 
 
-                        # Display μ and σ in the top-left corner
+                        # Display mu and sigma of plot in the top-left corner
                         ax.text(
                             0.02, 0.98, f"{data_label}: {param_label}\n {mu:.2f}$\pm${std:.2f}",
                             transform=ax.transAxes, fontsize=plot_config["text_fontsize"],
@@ -1900,71 +1905,71 @@ class Signal_Background:
                             bbox=plot_config["text_boxstyle"]
                         )
 
+                        # Set the plot labels and legend
                         ax.set_xlabel(f"{data_label} : {param_label}", fontsize=plot_config["xlabel_fontsize"])
                         ax.set_ylabel("Counts", fontsize=plot_config["ylabel_fontsize"])
                         ax.tick_params(axis='both', which='major', labelsize=plot_config["tick_fontsize"])
                         ax.legend(loc='upper right', fontsize=plot_config["legend_fontsize"])
 
-                    # Remove empty subplots if there are fewer than 9 parameters
-                    for j in range(num_params, 9):
-                        fig.delaxes(axes[j])
-
-                    # Set the overall title and layout
+                    # Set the overall title of grid
                     fig.suptitle(
-                        f"Histograms of Parameter {data_label} - Sample Size {sample_size}",
-                        fontsize=plot_config["suptitle_fontsize"]
-                    )
+                        f"Histograms of Parameter {data_label}- Using sWeights - Sample Size {sample_size}",
+                        fontsize=plot_config["suptitle_fontsize"])
                     plt.tight_layout(rect=[0, 0, 1, 0.96])
 
                     # Save the plot
                     save_path = f"{sub_dir}/{data_label}_histograms_{sample_size}.png"
                     plt.savefig(save_path)
-                    plt.close(fig)  # Close the figure to save memory
+                    plt.close(fig)  
 
-                    print(f"Plots for {data_label} saved in {sub_dir}")
+                    print(f"Histogram of {data_label} saved in {sub_dir}")
 
-        # Create Bias and Error Summary Plots
+
+
+        # Create Bias and Error against sample size summary plots
+        # Sort the sample sizes so the plots are in order
         sample_sizes = sorted(results.keys())
         num_params = len(param_labels)
 
         # Plot Bias vs. Sample Size
-        fig, axes = plt.subplots(3, 3, figsize=(13, 9))
+        fig, axes = plt.subplots(3, 2, figsize=(13, 9))
         axes = axes.flatten()
-
-        for i in range(num_params-1):
+        
+        # Plot for all parameters bar N as this is the expected number of events and not comparible
+        for i in [0,1,2,3,4,6]:
+            # Determine Absolute Bias for each parameter
             biases = [abs(results[sample_size]["Values_Bias"][i]) for sample_size in sample_sizes]
-
-            ax = axes[i]
+            if i != 6:
+                ax = axes[i]
+            else:
+                ax = axes[5]
             ax.plot(sample_sizes, biases, marker='o', label='Bias')
             ax.set_xlabel("Sample Size", fontsize=plot_config["xlabel_fontsize"])
-            ax.set_ylabel(f"Bias in {list(param_labels.values())[i]}", fontsize=plot_config["ylabel_fontsize"])
+            ax.set_ylabel(f"Abs(Bias) in {list(param_labels.values())[i]}", fontsize=plot_config["ylabel_fontsize"])
             ax.tick_params(axis='both', which='major', labelsize=plot_config["tick_fontsize"])
             ax.grid(True)
             # ax.set_xscale('log')
 
-
-        # Remove unused subplots, make bottom-right blank
-        for j in range(num_params, 9):
-            if j == 8:  # Bottom-right subplot
-                axes[j].set_axis_off()  # Turn off the axis to leave it blank
-            else:
-                fig.delaxes(axes[j])  # Remove unused axes
-
         plt.tight_layout(rect=[0, 0, 1, 0.96])
-        plt.savefig(f"{output_directory}/Bias_vs_Sample_Size.png")
-        plt.show()  # Display in Jupyter Notebook
-        plt.close(fig)
 
-        # Plot Errors_Mean vs. Sample Size
-        fig, axes = plt.subplots(3, 3, figsize=(13, 9))
+        # Save Plot
+        plt.savefig(f"{output_directory}/Trends_with_Samples_Size/Bias_vs_Sample_Size.png")
+        plt.show() 
+        plt.close(fig)
+        print(f"Bias vs Sample Size plot saved in {output_directory}/Trends_with_Samples_Size")
+
+        # Plot Values_Std vs. Sample Size
+        fig, axes = plt.subplots(3, 2, figsize=(13, 9))
         axes = axes.flatten()
 
-
-
-        for i in range(num_params - 1):  # Exclude last parameter
+        # Plot for all parameters bar N as this is the expected number of events and not comparible
+        for i in [0,1,2,3,4,6]: 
+            # Determine the uncertainty for each parameter value
             errors_mean = [results[sample_size]["Values_Std"][i] for sample_size in sample_sizes]
-
-            ax = axes[i]
+            if i != 6:
+                ax = axes[i]
+            else:
+                ax = axes[5]
             ax.plot(sample_sizes, errors_mean, marker='o', label='Error Mean')
             ax.set_xlabel("Sample Size", fontsize=plot_config["xlabel_fontsize"])
             ax.set_ylabel(f"Uncertainty in {list(param_labels.values())[i]}", fontsize=plot_config["ylabel_fontsize"])
@@ -1972,18 +1977,20 @@ class Signal_Background:
             ax.grid(True)
             # ax.set_xscale('log')
 
-
         plt.tight_layout(rect=[0, 0, 1, 0.96])
-        plt.savefig(f"{output_directory}/Errors_Mean_vs_Sample_Size.png")
+
+        # Save Plot
+        plt.savefig(f"{output_directory}/Trends_with_Samples_Size/Errors_Mean_vs_Sample_Size.png")
         plt.show()  # Display in Jupyter Notebook
         plt.close(fig)
+        print(f"Error vs Sample Size plot saved in {output_directory}/Trends_with_Samples_Size")
 
-        # Create Pull Distribution Plots
+        # Plot the Pull Distribution for each parameter - with a seperate plot for each sample size
         for sample_size, calc_values in results.items():
             num_params = len(param_labels)
             fig, ax = plt.subplots(figsize=(10, 6))
 
-            # Add light grey shading for |Pull| between 1 and 2
+            # Add light grey shading for Pull between 1 and 2
             ax.axvspan(-2, -1, color="lightgrey", alpha=0.4)
             ax.axvspan(1, 2, color="lightgrey", alpha=0.4)
 
@@ -1994,7 +2001,7 @@ class Signal_Background:
                 pull_mean_error = calc_values["Pull_Mean_Error"][i]
                 pull_std_error = calc_values["Pull_Std_Error"][i]
 
-                # Light blue bar: spans between the centers of the two red bars
+                # Light blue bar: between the centers of the two red bars
                 ax.barh(
                     y=i,
                     width=2 * pull_std,
@@ -2005,7 +2012,7 @@ class Signal_Background:
                     edgecolor="black",
                 )
 
-                # Dark blue region: centered at Pull Mean, spans Pull Mean ± Pull Mean Error
+                # Dark blue region: centered at Pull Mean, between Pull Mean +/- Pull Mean Error
                 ax.barh(
                     y=i,
                     width=pull_mean_error * 2,
@@ -2036,8 +2043,6 @@ class Signal_Background:
                     edgecolor="black",
                 )
 
-
-
             # Add labels and grid
             ax.set_yticks(range(num_params))
             ax.set_yticklabels(list(param_labels.values()), fontsize=plot_config["ylabel_fontsize"])
@@ -2050,16 +2055,12 @@ class Signal_Background:
             ax.grid(True, axis="x")
 
             # Save the plot
-            save_path = os.path.join(output_directory, f"Pull_Distributions_{sample_size}.png")
+            save_path = os.path.join(output_directory, f"Pull_Plots/Pull_Distributions_{sample_size}.png")
             plt.tight_layout()
             plt.savefig(save_path)
             plt.close(fig)
 
             print(f"Saved pull distribution plot for sample size {sample_size} in {save_path}")
 
-
-            print("Summary plots saved.")
+        # Return the results dictionary
         return results
-    
-
-    
