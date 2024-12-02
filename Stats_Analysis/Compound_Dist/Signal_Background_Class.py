@@ -1,9 +1,10 @@
+from .Background_Class import Background
+from .Signal_Class import Signal
+
 import os
 import re
 import shutil  
 import numpy as np  
-from Background_Class import Background
-from Signal_Class import Signal
 from scipy.optimize import minimize
 from scipy.integrate import dblquad
 import matplotlib.pyplot as plt

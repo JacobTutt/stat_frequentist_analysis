@@ -1,79 +1,71 @@
+from ..Base_Dist.NormalDistribution_Class import NormalDistribution
+from ..Base_Dist.UniformDistribution_Class import UniformDistribution
+
 import numpy as np
-from ExponentialDecay_Class import ExponentialDecay
-from CrystalBall_Class import CrystalBall
 from scipy.integrate import dblquad
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
-class Signal:
+
+class Background:
     """
-    Signal probability distribution defined by S(X, Y) = CrystalBall(X) * ExponentialDecay(Y).
+    Background probability distribution defined by B(X, Y) = UnfiromDistribution(X) * NormalDistrution(Y).
 
     This class supports computation of the joint PDF and joint CDF for scalar and array inputs,
-    with optional truncation for both X and Y.
+    with optional truncation for Y (X's Uniform must inherently be truncated).
 
     Parameters
     ----------
-    mu : float
-        The mean of the CrystalBall distribution in the X dimension.
-    sigma : float
-        The standard deviation of the CrystalBall distribution in the X dimension.
-    beta : float
-        The threshold value of the CrystalBall distribution in the X dimension.
-        Must be beta > 0.
-    m : float
-        The power-law tail exponent of the CrystalBall distribution in the X dimension.
-        Must be m > 1.
-    lamb : float
-        The decay constant (rate) of the ExponentialDecay distribution in the Y dimension.
-        Must be lamb > 0.
-    lower_bound_X : float, optional
-        The lower bound for the CrystalBall distribution. Default is None.
-    upper_bound_X : float, optional
-        The upper bound for the CrystalBall distribution. Default is None.
+    mu_b : float
+        The mean of the Normal distribution in the Y dimension.
+    sigma_b : float
+        The standard deviation of the Normal distribution in the Y dimension.
+        Must be sigma_b > 0.
+    lower_bound_X : float
+        The lower bound of the Uniform distribution in the X dimension.
+    upper_bound_X : float
+        The upper bound of the Uniform distribution in the X dimension.
+        Must be lower_bound_X < upper_bound_X.
     lower_bound_Y : float, optional
-        The lower bound for the ExponentialDecay distribution. Default is None.
+        The lower bound for truncation of the Normal distribution in the Y dimension. Default is None.
     upper_bound_Y : float, optional
-        The upper bound for the ExponentialDecay distribution. Default is None.
+        The upper bound for truncation of the Normal distribution in the Y dimension. Default is None.
 
     Raises
     ------
     ValueError
-        If beta <= 0.
-        If m <= 1.
-        If lamb <= 0.
+        If sigma_b <= 0.
         If lower_bound_X >= upper_bound_X.
         If lower_bound_Y >= upper_bound_Y.
+
+
     """
 
-    def __init__(self, mu, sigma, beta, m, lamb, lower_bound_X=None, upper_bound_X=None, lower_bound_Y=None, upper_bound_Y=None):
+    def __init__(self, mu_b, sigma_b, lower_bound_X, upper_bound_X, lower_bound_Y=None, upper_bound_Y=None):
         """
-        Initialize the Signal distribution with optional truncation by defining the CrystalBall and ExponentialDecay distributions in the X and Y dimensions, respectively.
+        Initialize the Background distribution with optional truncation by defining the Uniform and Normal distributions in the X and Y dimensions, respectively.
         """
 
         # Errors are automatically raised by the underlying distributions
         try:
-            self.X = CrystalBall(mu, sigma, beta, m, lower_bound_X, upper_bound_X)
-            self.Y = ExponentialDecay(lamb, lower_bound_Y, upper_bound_Y)
+            self.X = UniformDistribution(lower_bound_X, upper_bound_X)
+            self.Y = NormalDistribution(mu_b, sigma_b, lower_bound_Y, upper_bound_Y)
         except ValueError as e:
-            raise ValueError(f"Error when initialising Signal distribution: {e}")
+            raise ValueError(f"Error when initilasing Signal distribution: {e}")
         
-        self.mu = mu
-        self.sigma = sigma
-        self.beta = beta
-        self.m = m
-        self.lamb = lamb
+        self.mu_b = mu_b
+        self.sigma_b = sigma_b
         self.lower_bound_X = lower_bound_X
         self.upper_bound_X = upper_bound_X
         self.lower_bound_Y = lower_bound_Y
         self.upper_bound_Y = upper_bound_Y
-
+            
     def pdf(self, X, Y):
         """
         Calculate the joint Probability Density Function (PDF).
 
         The Joint PDF is defined as:
-        S(X, Y) = CrystalBall_PDF(X) * Exponential_PDF(Y)
+        B(X, Y) = Uniform_PDF(X) * Normal_PDF(Y)
 
         Parameters
         ----------
@@ -90,21 +82,21 @@ class Signal:
         """
         return self.X.pdf(X) * self.Y.pdf(Y)
     
-    def pdf_fitting(self, X, Y, mu, sigma, beta, m, lamb):
+    def pdf_fitting(self, X, Y, mu_b, sigma_b):
         """
         Calculate the Probability Density Function (PDF) for a given set of parameters, for use with MLE fitting.
         """
-        return self.X.pdf_fitting(X, mu, sigma, beta, m) * self.Y.pdf_fitting(Y, lamb)
+        return self.X.pdf_fitting(X) * self.Y.pdf_fitting(Y, mu_b, sigma_b)
 
     def cdf(self, X, Y):
         """
         Compute the joint Cumulative Distribution Function (CDF).
 
         The Joint CDF is defined as:
-        C(X, Y) = Integral of S(X,Y) from 0, X and 0, Y
+        C(X, Y) = Integral of B(X,Y) from 0, X and 0, Y
 
         As the distributions are independent, the joint CDF is the product of the individual CDFs:
-        C(X, Y) = CrystalBall_CDF(X) * Exponential_CDF(Y)
+        C(X, Y) = Unifrom_CDF(X) * Normal_CDF(Y)
 
         Parameters
         ----------
@@ -117,9 +109,10 @@ class Signal:
         -------
         float or np.ndarray
             The joint CDF value(s),
-            0 if X is outside [lower_bound_X, upper_bound_X] or Y is outside [lower_bound_Y, upper_bound_Y].
         """
         return self.X.cdf(X) * self.Y.cdf(Y)
+    
+    
     
     def normalisation_check(self):
         """
@@ -168,7 +161,7 @@ class Signal:
     
     def plot_dist(self):
         """
-        3D plots of the signal PDF.
+        3D plots of the background PDF.
         """
         # The X values the PDF will span over - slight overextension to show zero probability regions
         X = np.linspace(self.lower_bound_X - 0.05*(self.upper_bound_X - self.lower_bound_X), self.upper_bound_X + 0.05*(self.upper_bound_X-self.lower_bound_X), 1000)
@@ -222,5 +215,7 @@ class Signal:
 
     
 
-
     
+
+
+
