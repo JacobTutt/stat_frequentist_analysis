@@ -133,7 +133,7 @@ class CrystalBall:
     
     def pdf_fitting(self, X, mu, sigma, beta, m):
         """
-        Calculate the Probability Density Function (PDF), automatically including truncation if bounds are set.
+        Calculate the Probability Density Function (PDF) with no set parameters, automatically including truncation if bounds are set, for use in MLE fitting.
 
         """
         # Calculate the untruncated PDF using scipy.stats.crystalball
@@ -189,6 +189,40 @@ class CrystalBall:
 
         # Apply the truncation factor to the CDF
         return cdf / self.truncation_factor
+    
+    def cdf_fitting(self, X, mu, sigma, beta, m):
+        """
+        Calculate the Cumulative Distribution Function (CDF) with no set parameters, automatically including truncation if bounds are set, for use in Binned MLE fitting.
+
+        Parameters
+        ----------
+        X : float or np.ndarray
+            The value(s) at which to evaluate the truncated CDF.
+
+        Returns
+        -------
+        float or np.ndarray
+            The truncated CDF value(s).
+
+        Notes
+        -----
+        - For values less than lower_bound, the CDF equals 0.
+        - For values greater than upper_bound, the CDF equals 1
+        - Within the bounds, the CDF is scaled by the truncation factor.
+        """
+        
+        # Calculate the untruncated CDF using scipy.stats.crystalball
+        cdf = crystalball.cdf(X, beta, m, mu, sigma)
+        if self.lower_bound is not None or self.upper_bound is not None:
+                    untrunc_cdf_lower = crystalball.cdf(self.lower_bound, beta, m, mu, sigma)
+                    untrunc_cdf_upper = crystalball.cdf(self.upper_bound, beta, m, mu, sigma)
+                    cdf = np.where(X < self.lower_bound, 0, cdf - untrunc_cdf_lower)
+                    cdf = np.where(X > self.upper_bound, untrunc_cdf_upper - untrunc_cdf_lower, cdf)
+                    truncation_factor_fit = untrunc_cdf_upper - untrunc_cdf_lower
+                    return cdf / truncation_factor_fit
+        else:
+            return cdf
+
     
     def normalisation_check(self):
         """

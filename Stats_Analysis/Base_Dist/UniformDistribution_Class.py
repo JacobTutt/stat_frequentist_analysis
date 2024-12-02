@@ -88,6 +88,22 @@ class UniformDistribution:
             The CDF value(s).
         """
         return self.dist.cdf(X)
+    
+    def cdf_fitting(self, X): 
+        """
+        Calculate the Probability Density Function (PDF) for a fit.
+
+        Parameters
+        ----------
+        X : float or np.ndarray
+            The value(s) at which to evaluate the PDF.
+
+        Returns
+        -------
+        float or np.ndarray
+            The normalized PDF value(s) which are 0 for X outside [lower_bound, upper_bound].
+        """
+        return self.dist.cdf(X)
 
 
     def normalisation_check(self):

@@ -122,6 +122,12 @@ class Signal:
         """
         return self.X.cdf(X) * self.Y.cdf(Y)
     
+    def cdf_fitting(self, X, Y, mu, sigma, beta, m, lamb):
+        """
+        Calculate the Cumulative Density Function (CDF) for a given set of parameters, for use with binned MLE fitting.
+        """
+        return self.X.cdf_fitting(X, mu, sigma, beta, m) * self.Y.cdf_fitting(Y, lamb)
+    
     def normalisation_check(self):
         """
         Perform a numerical integration using scipy.integrate.dblquad to check the normalization of the joint PDF.

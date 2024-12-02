@@ -112,8 +112,13 @@ class Background:
         """
         return self.X.cdf(X) * self.Y.cdf(Y)
     
-    
-    
+    def cdf_fitting(self, X, Y, mu_b, sigma_b):
+        """
+        Calculate the Cumulative Density Function (CDF) for a given set of parameters, for use with Binned MLE fitting.
+        """
+        return self.X.cdf_fitting(X) * self.Y.cdf_fitting(Y, mu_b, sigma_b)
+
+
     def normalisation_check(self):
         """
         Perform a numerical integration using scipy.integrate.dblquad to check the normalization of the joint PDF.
