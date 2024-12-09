@@ -32,3 +32,11 @@ autodoc_default_options = {
 }
 autodoc_mock_imports = []  # Mock imports if some dependencies are unavailable
 html_theme = 'sphinx_rtd_theme'
+
+import sys
+print("Python Path:", sys.path)
+try:
+    import Stats_Analysis
+    print("Stats_Analysis imported successfully")
+except ImportError:
+    print("Failed to import Stats_Analysis")
