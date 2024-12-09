@@ -118,55 +118,70 @@ class Background:
         """
         return self.X.cdf_fitting(X) * self.Y.cdf_fitting(Y, mu_b, sigma_b)
 
+    def normalisation_check(self, over_whole_plane=False):
+            """
+            Check the normalization of the joint Probability Density Function (PDF) using numerical integration.
 
-    def normalisation_check(self):
-        """
-        Perform a numerical integration using scipy.integrate.dblquad to check the normalization of the joint PDF.
+            This method performs numerical integration with `scipy.integrate.dblquad` to ensure that the joint PDF 
+            integrates to 1. It supports both truncated and untruncated cases.
 
-        If the PDF is truncated:
-        It is first performed over the region the PDF is defined [lower_bound_X, upper_bound_X] for X and [lower_bound_Y, upper_bound_Y] for Y. 
-        
-        It is then performed over the entire real plane [-infinity, infinity] for X and Y.
+            Parameters
+            ----------
+            over_whole_plane : bool, optional
+                If True, perform integration over the entire real plane (-infinity to infinity) for both X and Y.
+                Default is False, in which case integration is only performed over the defined/truncated region.
 
-        Prints the results of the numerical integrations.
-        """
+            Resturns
+            ------
+            Normalisation results for:
+                - The defined/truncated region: [lower_bound_X, upper_bound_X] for X and [lower_bound_Y, upper_bound_Y] for Y.
+                - The entire real plane: X in [-infinity, infinity] and Y in [-infinity, infinity] (only if `over_whole_plane` is True).
 
-        # Set the limits for the integration, if None remains it will not pass into integration
-        if self.lower_bound_X is not None:
-            lower_bound_X = self.lower_bound_X
-        else:
-            lower_bound_X = -np.inf
-        
-        if self.upper_bound_X is not None:
-            upper_bound_X = self.upper_bound_X
-        else:
-            upper_bound_X = np.inf
+            Notes
+            -----
+            - If the PDF is truncated, the method integrates over the truncated region defined by the bounds 
+            (`lower_bound_X`, `upper_bound_X`, `lower_bound_Y`, `upper_bound_Y`).
+            - If no bounds are defined, the truncated region defaults to the entire real plane.
+            - The integration over the entire real plane is computationally intensive and can be skipped by setting `over_whole_plane` to False.
+            """
 
-        if self.lower_bound_Y is not None:
-            lower_bound_Y = self.lower_bound_Y
-        else:
-            lower_bound_Y = -np.inf
+            # Set the limits for the integration, if None remains it will not pass into integration
+            if self.lower_bound_X is not None:
+                lower_bound_X = self.lower_bound_X
+            else:
+                lower_bound_X = -np.inf
+            
+            if self.upper_bound_X is not None:
+                upper_bound_X = self.upper_bound_X
+            else:
+                upper_bound_X = np.inf
 
-        if self.upper_bound_Y is not None:
-            upper_bound_Y = self.upper_bound_Y
-        else:
-            upper_bound_Y = np.inf
+            if self.lower_bound_Y is not None:
+                lower_bound_Y = self.lower_bound_Y
+            else:
+                lower_bound_Y = -np.inf
+
+            if self.upper_bound_Y is not None:
+                upper_bound_Y = self.upper_bound_Y
+            else:
+                upper_bound_Y = np.inf
 
 
 
-        if (self.lower_bound_X is not None) or (self.upper_bound_X is not None) or (self.lower_bound_Y is not None) or (self.upper_bound_Y is not None):
-            print(f"Normalisation over the region the PDF is defined/truncated: [{lower_bound_X}, {upper_bound_X}] in X, [{lower_bound_Y}, {upper_bound_Y}] in Y")
-            # have to use constant `lambda` functions for the y limits of integration due to format of 
-            integral_bounds, error_bounds = dblquad(lambda y, x: self.pdf(x, y), lower_bound_X, upper_bound_X, lambda x: lower_bound_Y, lambda x: upper_bound_Y)
-            print(f"Integral: {integral_bounds} \u00B1 {error_bounds}")
+            if (self.lower_bound_X is not None) or (self.upper_bound_X is not None) or (self.lower_bound_Y is not None) or (self.upper_bound_Y is not None):
+                print(f"Normalisation over the region the PDF is defined/truncated: [{lower_bound_X}, {upper_bound_X}] in X, [{lower_bound_Y}, {upper_bound_Y}] in Y")
+                # have to use constant `lambda` functions for the y limits of integration due to format of 
+                integral_bounds, error_bounds = dblquad(lambda y, x: self.pdf(x, y), lower_bound_X, upper_bound_X, lambda x: lower_bound_Y, lambda x: upper_bound_Y)
+                print(f"Integral: {integral_bounds} \u00B1 {error_bounds}")
+            if over_whole_plane:
+                print(f"Normalisation over the whole real plane: X in [-infinity, infinity], Y in [-infinity, infinity]")
+                integral_inf, error_inf = dblquad(lambda y, x: self.pdf(x, y), -np.inf, np.inf, lambda x: -np.inf, lambda x: np.inf)
+                print(f"Integral: {integral_inf} \u00B1 {error_inf}")
 
-        print(f"Normalisation over the whole real plane: X in [-infinity, infinity], Y in [-infinity, infinity]")
-        integral_inf, error_inf = dblquad(lambda y, x: self.pdf(x, y), -np.inf, np.inf, lambda x: -np.inf, lambda x: np.inf)
-        print(f"Integral: {integral_inf} \u00B1 {error_inf}")
     
     def plot_dist(self):
         """
-        3D plots of the background PDF.
+        2D plots of the background PDF.
         """
         # The X values the PDF will span over - slight overextension to show zero probability regions
         X = np.linspace(self.lower_bound_X - 0.05*(self.upper_bound_X - self.lower_bound_X), self.upper_bound_X + 0.05*(self.upper_bound_X-self.lower_bound_X), 1000)
@@ -211,8 +226,9 @@ class Background:
         ax2.plot_surface(X, Y, Z, cmap='viridis', alpha=0.9)
         ax2.set_xlabel('X', fontsize=label_fontsize, labelpad=15)
         ax2.set_ylabel('Y', fontsize=label_fontsize, labelpad=15)
-        ax2.set_zlabel('Total PDF', fontsize=label_fontsize, labelpad=15)
+        ax2.set_zlabel('Total PDF', fontsize=label_fontsize, labelpad=30)
         ax2.tick_params(axis='both', labelsize=tick_fontsize)
+        ax2.tick_params(axis='z', pad=13) 
         ax2.view_init(elev=30, azim=60)
 
         plt.tight_layout()

@@ -1,6 +1,5 @@
 from .Background_Class import Background
 from .Signal_Class import Signal
-
 import os
 import re
 import shutil  
@@ -198,18 +197,32 @@ class Signal_Background:
             raise RuntimeError("Optimisation failed")
         
         return max_pdf
-
-
-    def normalisation_check(self):
+    
+    def normalisation_check(self, over_whole_plane=False):
         """
-        Perform a numerical integration using scipy.integrate.dblquad to check the normalization of the joint PDF.
+        Check the normalization of the joint Probability Density Function (PDF) using numerical integration.
 
-        If the PDF is truncated:
-        It is first performed over the region the PDF is defined [lower_bound_X, upper_bound_X] for X and [lower_bound_Y, upper_bound_Y] for Y. 
-        
-        It is then performed over the entire real plane [-infinity, infinity] for X and Y.
+        This method performs numerical integration with `scipy.integrate.dblquad` to ensure that the joint PDF 
+        integrates to 1. It supports both truncated and untruncated cases.
 
-        Prints the results of the numerical integrations.
+        Parameters
+        ----------
+        over_whole_plane : bool, optional
+            If True, perform integration over the entire real plane (-infinity to infinity) for both X and Y.
+            Default is False, in which case integration is only performed over the defined/truncated region.
+
+        Resturns
+        ------
+        Normalisation results for:
+            - The defined/truncated region: [lower_bound_X, upper_bound_X] for X and [lower_bound_Y, upper_bound_Y] for Y.
+            - The entire real plane: X in [-infinity, infinity] and Y in [-infinity, infinity] (only if `over_whole_plane` is True).
+
+        Notes
+        -----
+        - If the PDF is truncated, the method integrates over the truncated region defined by the bounds 
+        (`lower_bound_X`, `upper_bound_X`, `lower_bound_Y`, `upper_bound_Y`).
+        - If no bounds are defined, the truncated region defaults to the entire real plane.
+        - The integration over the entire real plane is computationally intensive and can be skipped by setting `over_whole_plane` to False.
         """
 
         # Set the limits for the integration, if None remains it will not pass into integration
@@ -234,17 +247,16 @@ class Signal_Background:
             upper_bound_Y = np.inf
 
 
-        # Does integration over the truncated region to show normalisation within
+
         if (self.lower_bound_X is not None) or (self.upper_bound_X is not None) or (self.lower_bound_Y is not None) or (self.upper_bound_Y is not None):
             print(f"Normalisation over the region the PDF is defined/truncated: [{lower_bound_X}, {upper_bound_X}] in X, [{lower_bound_Y}, {upper_bound_Y}] in Y")
-            # have to use constant `lambda` functions for the y limits of integration due to format of dblquad
+            # have to use constant `lambda` functions for the y limits of integration due to format of 
             integral_bounds, error_bounds = dblquad(lambda y, x: self.pdf(x, y), lower_bound_X, upper_bound_X, lambda x: lower_bound_Y, lambda x: upper_bound_Y)
             print(f"Integral: {integral_bounds} \u00B1 {error_bounds}")
-
-        # Does integration over the whole real plane to show normalisation over the whole plane, ie to check no probability contributions outside of the defined region
-        print(f"Normalisation over the whole real plane: X in [-infinity, infinity], Y in [-infinity, infinity]")
-        integral_inf, error_inf = dblquad(lambda y, x: self.pdf(x, y), -np.inf, np.inf, lambda x: -np.inf, lambda x: np.inf)
-        print(f"Integral: {integral_inf} \u00B1 {error_inf}")
+        if over_whole_plane:
+            print(f"Normalisation over the whole real plane: X in [-infinity, infinity], Y in [-infinity, infinity]")
+            integral_inf, error_inf = dblquad(lambda y, x: self.pdf(x, y), -np.inf, np.inf, lambda x: -np.inf, lambda x: np.inf)
+            print(f"Integral: {integral_inf} \u00B1 {error_inf}")
     
 
     def plot_dist(self):
@@ -322,8 +334,11 @@ class Signal_Background:
 
         Returns
         -------
-        float or np.ndarray
-            The normalized marginal PDF value(s)
+        tuple of (float or np.ndarray, float or np.ndarray, float or np.ndarray)
+            A tuple containing:
+            - The signal component of the marginal PDF.
+            - The background component of the marginal PDF.
+            - The total marginal PDF (signal + background).
         """
         # Use pre defined X component of the Signal and Background PDFs to calculate the marginal PDF
         signal_cont_pdf = self.f*self.Signal.X.pdf(X)
@@ -346,8 +361,11 @@ class Signal_Background:
 
         Returns
         -------
-        float or np.ndarray
-            The marginal CDF value(s)
+        tuple of (float or np.ndarray, float or np.ndarray, float or np.ndarray)
+            A tuple containing:
+            - The signal component of the marginal CDF.
+            - The background component of the marginal CDF.
+            - The total marginal CDF (signal + background).
         """
         # Use pre defined X component of the Signal and Background CDFs to calculate the marginal CDF
         signal_cont_cdf = self.f*self.Signal.X.cdf(X)
@@ -370,8 +388,11 @@ class Signal_Background:
 
         Returns
         -------
-        float or np.ndarray
-            The normalized marginal PDF value(s)
+        tuple of (float or np.ndarray, float or np.ndarray, float or np.ndarray)
+            A tuple containing:
+            - The signal component of the marginal PDF.
+            - The background component of the marginal PDF.
+            - The total marginal PDF (signal + background).
         """
         # Use pre defined Y component of the Signal and Background PDFs to calculate the marginal PDF
         signal_cont_pdf = self.f*self.Signal.Y.pdf(Y)
@@ -394,8 +415,11 @@ class Signal_Background:
 
         Returns
         -------
-        float or np.ndarray
-            The marginal CDF value(s)
+        tuple of (float or np.ndarray, float or np.ndarray, float or np.ndarray)
+            A tuple containing:
+            - The signal component of the marginal CDF.
+            - The background component of the marginal CDF.
+            - The total marginal CDF (signal + background).
         """
         # Use pre defined Y component of the Signal and Background CDFs to calculate the marginal CDF
         signal_cont_cdf = self.f*self.Signal.Y.cdf(Y)
@@ -426,47 +450,58 @@ class Signal_Background:
         else:
             Y = np.linspace(self.true_params[5] - 3*self.true_params[6], self.true_params[5] + 3*self.true_params[6], 1000)
 
-        fig, axs = plt.subplots(2, 2, figsize=(14, 10))
+        fig, axs = plt.subplots(2, 2, figsize=(16, 12))
+
+        # Predetermined font sizes and line widths
+        label_fontsize = 16
+        tick_fontsize = 14
+        legend_fontsize = 14
+        line_width = 2
+        alpha_value = 0.8
 
         # Top left: marginal_pdf_x
         signal_pdf_x, background_pdf_x, total_pdf_x = self.marginal_pdf_x(X)
-        axs[0, 0].plot(X, signal_pdf_x, label='Signal PDF: Crystal Ball', color='green')
-        axs[0, 0].plot(X, background_pdf_x, label='Background PDF: Uniform', color='blue')
-        axs[0, 0].plot(X, total_pdf_x, label='Total PDF', color='red')
-        axs[0, 0].set_xlabel('X', fontsize=14)
-        axs[0, 0].set_ylabel(f'Marginal PDF in X, f={self.f}', fontsize=14)
-        axs[0, 0].tick_params(axis='both', which='major', labelsize=12)
-        axs[0, 0].legend(fontsize=14)
+        axs[0, 0].plot(X, signal_pdf_x, label='Signal PDF: Crystal Ball', color='green', linewidth=line_width, alpha=alpha_value)
+        axs[0, 0].plot(X, background_pdf_x, label='Background PDF: Uniform', color='blue', linewidth=line_width, alpha=alpha_value)
+        axs[0, 0].plot(X, total_pdf_x, label='Total PDF', color='red', linewidth=line_width, alpha=alpha_value)
+        axs[0, 0].set_xlabel('X', fontsize=label_fontsize)
+        axs[0, 0].set_ylabel(f'Marginal PDF in X (f = {self.f})', fontsize=label_fontsize)
+        axs[0, 0].tick_params(axis='both', which='major', labelsize=tick_fontsize)
+        axs[0, 0].legend(fontsize=legend_fontsize)
+        axs[0, 0].grid(linestyle='--', alpha=0.6)
 
         # Top right: marginal_cdf_x
         signal_cdf_x, background_cdf_x, total_cdf_x = self.marginal_cdf_x(X)
-        axs[0, 1].plot(X, signal_cdf_x, label='Signal CDF: Crytsal Ball', color='green')
-        axs[0, 1].plot(X, background_cdf_x, label='Background CDF: Uniform', color='blue')
-        axs[0, 1].plot(X, total_cdf_x, label='Total CDF', color='red')
-        axs[0, 1].set_xlabel('X', fontsize=14)
-        axs[0, 1].set_ylabel(f'Marginal CDF in X, f={self.f}', fontsize=14)
-        axs[0, 1].tick_params(axis='both', which='major', labelsize=12)
-        axs[0, 1].legend(fontsize=14)
+        axs[0, 1].plot(X, signal_cdf_x, label='Signal CDF: Crystal Ball', color='green', linewidth=line_width, alpha=alpha_value)
+        axs[0, 1].plot(X, background_cdf_x, label='Background CDF: Uniform', color='blue', linewidth=line_width, alpha=alpha_value)
+        axs[0, 1].plot(X, total_cdf_x, label='Total CDF', color='red', linewidth=line_width, alpha=alpha_value)
+        axs[0, 1].set_xlabel('X', fontsize=label_fontsize)
+        axs[0, 1].set_ylabel(f'Marginal CDF in X (f = {self.f})', fontsize=label_fontsize)
+        axs[0, 1].tick_params(axis='both', which='major', labelsize=tick_fontsize)
+        axs[0, 1].legend(fontsize=legend_fontsize)
+        axs[0, 1].grid(linestyle='--', alpha=0.6)
 
         # Bottom left: marginal_pdf_y
         signal_pdf_y, background_pdf_y, total_pdf_y = self.marginal_pdf_y(Y)
-        axs[1, 0].plot(Y, signal_pdf_y, label='Signal PDF: Exponential', color='green')
-        axs[1, 0].plot(Y, background_pdf_y, label='Background PDF: Normal', color='blue')
-        axs[1, 0].plot(Y, total_pdf_y, label='Total PDF', color='red')
-        axs[1, 0].set_xlabel('Y', fontsize=14)
-        axs[1, 0].set_ylabel(f'Marginal PDF in Y, f={self.f}', fontsize=14)
-        axs[1, 0].tick_params(axis='both', which='major', labelsize=12)
-        axs[1, 0].legend(fontsize=14)
+        axs[1, 0].plot(Y, signal_pdf_y, label='Signal PDF: Exponential', color='green', linewidth=line_width, alpha=alpha_value)
+        axs[1, 0].plot(Y, background_pdf_y, label='Background PDF: Normal', color='blue', linewidth=line_width, alpha=alpha_value)
+        axs[1, 0].plot(Y, total_pdf_y, label='Total PDF', color='red', linewidth=line_width, alpha=alpha_value)
+        axs[1, 0].set_xlabel('Y', fontsize=label_fontsize)
+        axs[1, 0].set_ylabel(f'Marginal PDF in Y (f = {self.f})', fontsize=label_fontsize)
+        axs[1, 0].tick_params(axis='both', which='major', labelsize=tick_fontsize)
+        axs[1, 0].legend(fontsize=legend_fontsize)
+        axs[1, 0].grid(linestyle='--', alpha=0.6)
 
         # Bottom right: marginal_cdf_y
         signal_cdf_y, background_cdf_y, total_cdf_y = self.marginal_cdf_y(Y)
-        axs[1, 1].plot(Y, signal_cdf_y, label='Signal CDF: Exponential', color='green')
-        axs[1, 1].plot(Y, background_cdf_y, label='Background CDF: Normal', color='blue')
-        axs[1, 1].plot(Y, total_cdf_y, label='Total CDF', color='red')
-        axs[1, 1].set_xlabel('Y', fontsize=14)
-        axs[1, 1].set_ylabel(f'Marginal CDF in Y, f={self.f}', fontsize=14)
-        axs[1, 1].tick_params(axis='both', which='major', labelsize=12)
-        axs[1, 1].legend(fontsize=14)
+        axs[1, 1].plot(Y, signal_cdf_y, label='Signal CDF: Exponential', color='green', linewidth=line_width, alpha=alpha_value)
+        axs[1, 1].plot(Y, background_cdf_y, label='Background CDF: Normal', color='blue', linewidth=line_width, alpha=alpha_value)
+        axs[1, 1].plot(Y, total_cdf_y, label='Total CDF', color='red', linewidth=line_width, alpha=alpha_value)
+        axs[1, 1].set_xlabel('Y', fontsize=label_fontsize)
+        axs[1, 1].set_ylabel(f'Marginal CDF in Y (f = {self.f})', fontsize=label_fontsize)
+        axs[1, 1].tick_params(axis='both', which='major', labelsize=tick_fontsize)
+        axs[1, 1].legend(fontsize=legend_fontsize)
+        axs[1, 1].grid(linestyle='--', alpha=0.6)
 
         plt.tight_layout()
         plt.show()
@@ -489,6 +524,12 @@ class Signal_Background:
         max_batch_size : int, optional
             Maximum batch size for iterations to prevent overloading memory (default: 2,000,000).
             May need adjusting for devices with limited memory.
+        poisson : bool, optional
+            If True, the total number of samples (`desired_samples`) will be drawn 
+            from a Poisson distribution with a mean of `desired_samples` (default: False).
+        save_to_class : bool, optional
+            If True, the generated samples will be saved as an attribute of the class 
+            (`self.samples`) for later use (default: False).
 
         Returns
         -------
@@ -581,16 +622,30 @@ class Signal_Background:
 
         return samples
     
-    def plot_samples(self):
+    def plot_samples(self, samples = None):
         """
         Plot the results of the sampled data in a 2x2 grid:
-        - Top-left: 3D histogram of the joint distribution
-        - Top-right: Surface plot of the joint PDF
-        - Bottom-left: Histogram of sampled X vs marginal PDF
-        - Bottom-right: Histogram of sampled Y vs marginal PDF
+        - Top-left: 3D histogram of the joint distribution.
+        - Top-right: Surface plot of the joint PDF.
+        - Bottom-left: Histogram of sampled X values vs marginal PDF.
+        - Bottom-right: Histogram of sampled Y values vs marginal PDF.
+
+        Parameters
+        ----------
+        samples : np.ndarray, optional
+            Array of shape (N, 2) containing the sampled data points (X, Y).
+            If not provided, the method attempts to use `self.samples`.
+            If neither is available, a ValueError is raised.
+
+        Raises
+        ------
+        ValueError
+            If no samples are provided and no samples are stored in `self.samples`.
         """
-        if self.samples is None:
+        if samples is None and self.samples is None:
             raise ValueError("No samples have been generated. Please run the `accept_reject_sample` method first.")
+        if samples is None:
+            samples = self.samples
         
         # Define ranges for X and Y based on bounds
         X = np.linspace(self.lower_bound_X - 0.1*(self.upper_bound_X - self.lower_bound_X), self.upper_bound_X+ 0.1*(self.upper_bound_X - self.lower_bound_X), 1000)
@@ -599,9 +654,6 @@ class Signal_Background:
         # Compute the PDF grid for plotting
         X_grid, Y_grid = np.meshgrid(X, Y)
         Z = self.pdf(X_grid, Y_grid)
-
-        # Import samples from the class
-        samples = self.samples
 
         # Set consistent font sizes
         label_fontsize = 18
@@ -786,6 +838,8 @@ class Signal_Background:
         # Create the negative log-likelihood function
         neg_log_likelihood = ExtendedUnbinnedNLL((samples_x, samples_y), density)
 
+        print((samples_x, samples_y))
+
         # Create the Minuit object with initial guesses
         mi = Minuit(neg_log_likelihood, mu=initial_params[0],sigma=initial_params[1], beta=initial_params[2], 
                     m=initial_params[3], lamb=initial_params[4], mu_b=initial_params[5], sigma_b=initial_params[6],
@@ -833,7 +887,6 @@ class Signal_Background:
 
         Returns
         -------
-
         1. Parameter Summary Table
         2. Correlation Heatmap
 
@@ -927,7 +980,6 @@ class Signal_Background:
         
         Returns
         -------
-
         A  3x3 grid of plots, where each subplot corresponds to a parameter's profiled log-likelihood (`-2 ln L`) as a function of its value. 
         The plots highlight the 1σ and 2σ confidence intervals for each parameter.
 
@@ -975,7 +1027,7 @@ class Signal_Background:
         # For all parameters a seperate subplot is created
         for i, param in enumerate(params):
             ax = axes[i]
-
+            print(f'Plotting profile for {param}')
             # Get the likelihood profile data using iminuit's `mnprofile`
             # scan_values: where the nll is evaluated
             # nll_values: the nll values
@@ -1211,7 +1263,7 @@ class Signal_Background:
                 # Combine results into a single array
                 results = np.array([values, errors])
 
-                # Save the results to the file file
+                # Save the results to the file
                 output_file_name = f"ParamResults_No_{num_samples}_BaseSize_{sample_size}.npy"
                 output_file_path = os.path.join(output_directory, output_file_name)
                 np.save(output_file_path, results, allow_pickle=True)
@@ -1234,7 +1286,7 @@ class Signal_Background:
             Path to the directory where plots will be saved (default: "Bootstrap/Plots").
             Subdirectories for histograms, trends, and pull plots are created or cleared before use.
 
-        Outputs
+        Returns
         -------
         This method generates the following plots:
         1. Histograms for each parameter (value, error, and pull) across bootstrap samples.
@@ -1563,6 +1615,40 @@ class Signal_Background:
         return results
 
     def fit_params_sWeights(self, initial_params, samples = None, print_results = False, norm_check = True):
+        """
+        Fit parameters using the sWeights method.
+
+        This method performs the following steps:
+        1. Fits the X dimension using an extended unbinned likelihood method.
+        2. Calculates signal and background weights using the sWeights method.
+        3. Projects the signal distribution to the Y dimension.
+        4. Fits the Y dimension using a binned maximum likelihood estimation.
+
+        Parameters
+        ----------
+        initial_params : list or array-like
+            Initial guesses for the parameters [mu, sigma, beta, m, f, lamb, N].
+        samples : np.ndarray, optional
+            The samples to be used for fitting. If not provided, the samples generated by the `accept_reject_sample` method will be used.
+        print_results : bool, optional
+            If True, prints the fitting results and plots the intermediate steps. Default is False.
+        norm_check : bool, optional
+            If True, performs normalization checks during the sWeights calculation. Default is True.
+
+        Returns
+        -------
+        mi_total_values : dict
+            A dictionary containing the fitted parameter values.
+        mi_total_errors : dict
+            A dictionary containing the errors of the fitted parameters.
+
+        Raises
+        ------
+        ValueError
+            If no samples are provided or generated by the `accept_reject_sample` method.
+        RuntimeError
+            If the minimization does not converge.
+        """
         # Allow for the samples to be passed in, if not try use the samples already generated in class
         if samples is None:
             samples = self.samples
@@ -1583,7 +1669,7 @@ class Signal_Background:
             pdf_vals = f * self.Signal.X.pdf_fitting(samples_x, mu, sigma, beta, m) + (1-f) * self.Background.X.pdf_fitting(samples_x)
             return N, N * pdf_vals
 
-        # Create the negative log-likelihood function
+        # Create the negative log-likelihood function - to be used only for x dimension
         neg_log_likelihood_x = ExtendedUnbinnedNLL(samples_x, density_x)
 
         # Create the Minuit object with initial guesses
@@ -1612,6 +1698,7 @@ class Signal_Background:
         mi_x.hesse()
 
         if print_results:
+            print("Step 1 - Iminuit Extended MLE: X Dimension Fitting Results")
             print(mi_x)
 
         def signal_x_pdf_fit(x):
@@ -1631,6 +1718,7 @@ class Signal_Background:
     
         # Display the results
         if print_results:
+            print("Step 2 - Sweights: Determine Signal and Background Weights from X")
             fig, ax = plt.subplots()
             ax.plot(samples_x, signal_weight, 'r--', label='Signal Weight')
             ax.plot(samples_x, background_weight, 'b--', label='Background Weight')
@@ -1641,32 +1729,43 @@ class Signal_Background:
             ax.set_ylabel('Weight')
             plt.show()
 
+        # Project the distribution to the Y dimension by applying the weight
+        # Effectively giving signal distribution in Y
         yrange = (self.lower_bound_Y, self.upper_bound_Y)
-
         ysw, ye = np.histogram( samples_y, bins=50, range=yrange, weights=signal_weight)
         ysw2, ye = np.histogram( samples_y, bins=50, range=yrange, weights=signal_weight**2)
         cy = 0.5*(ye[1:]+ye[:-1])
 
         if print_results:
-            fig, ax = plt.subplots(figsize=(8, 8))
+            print("Step 3 - Sweights: Project to Signal Distribution in Y")
+
+            # Plot to show the SWeighted data in Y compared to the true signal distribution
+            fig, ax = plt.subplots(figsize=(10, 6))
 
             # Plot the weighted histogram with error bars
-            ax.errorbar(cy, ysw, yerr=ysw2**0.5, fmt='rx', label='Weighted')
+            ax.errorbar(cy, ysw, yerr=ysw2**0.5, fmt='rx', label='All SWeighted Data in Y', markersize=5, capsize=4, capthick=1)
+            ax.hist(cy, bins=len(cy), weights=ysw, density=False, alpha=0.3, color='red')
 
             # Plot the expected PDF curve
-            ax.plot(cy, (ye[2]-ye[1]) * mi_x.values["N"] * mi_x.values["f"] * self.Signal.Y.pdf(cy), label='True PDF')
+            ax.plot(cy, (ye[2] - ye[1]) * mi_x.values["N"] * mi_x.values["f"] * self.Signal.Y.pdf(cy), label='Expected Signal Counts \n From True PDF', color='blue', linewidth=2)
 
-            # Add labels and legend
-            ax.legend()
-            ax.set_xlabel('$Y$')
-            ax.set_ylabel('Counts')
 
-            # Display the plot
+            ax.grid(visible=True, linestyle='--', linewidth=0.5)
+            ax.set_xlabel("Y", fontsize=14)
+            ax.set_ylabel("Counts", fontsize=14)
+            ax.legend(fontsize=12)
+
+            ax.tick_params(axis='both', which='major', labelsize=12)
+            ax.tick_params(axis='both', which='minor', labelsize=10)
+
+            plt.tight_layout()
             plt.show()
 
+        # Define the CDF function for the signal in Y dimension for Binned MLE
         def cdf_signal_y(x, lamb):
             return self.Signal.Y.cdf_fitting(x, lamb)
         
+        # Perform Binned MLE for the signal in the Y dimension witht the whole data set
         neg_log_likelihood_signal_y_binned = BinnedNLL(ysw, ye, cdf_signal_y)
         mi_signal_y = Minuit(neg_log_likelihood_signal_y_binned, lamb=initial_params[5])
 
@@ -1681,6 +1780,7 @@ class Signal_Background:
         mi_signal_y.hesse()
 
         if print_results:
+            print("Step 4 - Binned MLE: Signal in Y Dimension Fitting Results")
             print(mi_signal_y)
 
         # Explicitly construct dictionaries from ValueView objects
@@ -1691,70 +1791,148 @@ class Signal_Background:
         mi_total_values = {**mi_x_values_dict, **mi_signal_y_values_dict}
         mi_total_errors = {**mi_x_errors_dict, **mi_signal_y_errors_dict}
 
+        if print_results:
+            print("\n Final summary of Results")
+            # Print table of results 
+            true_values = {
+                "mu": self.true_params[0],
+                "sigma": self.true_params[1],
+                "beta": self.true_params[2],
+                "m": self.true_params[3],
+                "f": self.true_params[7],
+                "N": "N/A", 
+                "lamb": self.true_params[4],
+            }
+            table_data = [
+                [
+                    param, 
+                    f"{round(value, 4)} ± {round(mi_total_errors[param], 4)}", 
+                    true_values.get(param, "N/A")  # Use "N/A" if no true value is provided
+                ]
+                for param, value in mi_total_values.items()
+            ]
+            headers = ["Parameter", "Value ± Error", "True Value"]
+            print(tabulate(table_data, headers=headers, tablefmt="grid"))
+
         return mi_total_values, mi_total_errors
 
     def param_bootstrap_sWeights_fit(self,initial_params, norm_check = True,  input_directory="Bootstrap/Samples", output_directory="Bootstrap/sWeights/Results"):
+        """
+        Perform parameter fitting using sWeights for signal and background PDFs for all bootstrap samples. 
 
-            # Ensure the output directory exists and is empty
-            if os.path.exists(output_directory):
-                shutil.rmtree(output_directory)
-            os.makedirs(output_directory)
+        This function fits the parameters of signal and background probability density functions (PDFs) using extended unbinned maximum likelihood for the X dimension.
+        It then calculates the signal and background weights using the sWeight method and fits the signal PDF in the Y dimension using binned maximum likelihood.
 
-            # Repeat for all files in the input directory
-            for file_name in os.listdir(input_directory):
-                # Ensure it is a numpy file - ie the samples
-                if file_name.endswith(".npy"):
-                    # Extract the sample size and number samples from the file name
-                    match = re.search(r"Samples_No_(\d+)_BaseSize_(\d+).npy", file_name)
-                    if not match:
-                        continue
-                    num_samples = int(match.group(1))
-                    sample_size = int(match.group(2))
+        Args:
+        -----
+            initial_params (list): Initial guesses for the parameters. The list must contain: [mu, sigma, beta, m, f, lamb, N]
+            samples (numpy.ndarray, optional): Array of samples for fitting. If None, it uses samples generated or stored in the class. Defaults to None.
+            print_results (bool, optional): If True, prints detailed fitting results and plots. Defaults to False.
+            norm_check (bool, optional): If True, enables normalization checks in the sWeight method. Defaults to True.
 
-                    print(f"Processing bootstrap samples of size {sample_size} using sWeights...")
+        Returns:
+        --------
+            tuple: Two dictionaries containing the fitted parameter values and their associated errors:
+                - mi_total_values (dict): Fitted parameter values.
+                - mi_total_errors (dict): Fitted parameter errors.
 
-                    # Load the bootstrap samples data from the file
-                    file_path = os.path.join(input_directory, file_name)
-                    samples = np.load(file_path, allow_pickle=True) 
+        Raises:
+        -------
+            ValueError: If no samples are provided or available for fitting.
+            RuntimeError: If minimization for X or Y dimension does not converge.
+        """
+        # Ensure the output directory exists and is empty
+        if os.path.exists(output_directory):
+            shutil.rmtree(output_directory)
+        os.makedirs(output_directory)
 
-                    # Add the Base sample size to the initial parameters as the expected number of events
-                    initial_params_samples = initial_params.copy()
-                    initial_params_samples.append(sample_size)
-                    num_params = len(initial_params_samples)
-                    
-                    # Pre define arrays to store the results for faster computation
-                    values = np.full((num_samples, num_params), np.nan)
-                    errors = np.full((num_samples, num_params), np.nan)
-                    non_converged_count = 0
+        # Repeat for all files in the input directory
+        for file_name in os.listdir(input_directory):
+            # Ensure it is a numpy file - ie the samples
+            if file_name.endswith(".npy"):
+                # Extract the sample size and number samples from the file name
+                match = re.search(r"Samples_No_(\d+)_BaseSize_(\d+).npy", file_name)
+                if not match:
+                    continue
+                num_samples = int(match.group(1))
+                sample_size = int(match.group(2))
 
-                    # Repeat parameter fitting for each sample in the file
-                    for i, sample in enumerate(samples):
-                        try:
-                            # Perform the parameter fitting using `fit_params`
-                            fit_results, fit_errors = self.fit_params_sWeights(initial_params_samples, sample, norm_check = norm_check)
-                            values[i] = np.array(list(fit_results.values()))
-                            errors[i] = np.array(list(fit_errors.values()))
+                print(f"Processing bootstrap samples of size {sample_size} using sWeights...")
 
-                        except Exception as e:
-                            # If fitting fails, log the failure and continue
-                            print(f"Sample {i + 1} (size {sample_size}) did not converge")
-                            print(e)
-                            non_converged_count += 1
+                # Load the bootstrap samples data from the file
+                file_path = os.path.join(input_directory, file_name)
+                samples = np.load(file_path, allow_pickle=True) 
 
-                    # Combine results into a single array
-                    results = np.array([values, errors])
+                # Add the Base sample size to the initial parameters as the expected number of events
+                initial_params_samples = initial_params.copy()
+                initial_params_samples.append(sample_size)
+                num_params = len(initial_params_samples)
+                
+                # Pre define arrays to store the results for faster computation
+                values = np.full((num_samples, num_params), np.nan)
+                errors = np.full((num_samples, num_params), np.nan)
+                non_converged_count = 0
 
-                    # Save the results to the file file
-                    output_file_name = f"ParamResults_No_{num_samples}_BaseSize_{sample_size}.npy"
-                    output_file_path = os.path.join(output_directory, output_file_name)
-                    np.save(output_file_path, results, allow_pickle=True)
+                # Repeat parameter fitting for each sample in the file
+                for i, sample in enumerate(samples):
+                    try:
+                        # Perform the parameter fitting using `fit_params_sWeights`
+                        fit_results, fit_errors = self.fit_params_sWeights(initial_params_samples, sample, norm_check = norm_check)
+                        values[i] = np.array(list(fit_results.values()))
+                        errors[i] = np.array(list(fit_errors.values()))
 
-                    print(f"In total {non_converged_count} samples did not converge out of {num_samples}.")
-                    print(f"Results saved to {output_file_path}\n ")
+                    except Exception as e:
+                        # If fitting fails, log the failure and continue
+                        print(f"Sample {i + 1} (size {sample_size}) did not converge")
+                        print(e)
+                        non_converged_count += 1
+
+                # Combine results into a single array
+                results = np.array([values, errors])
+
+                # Save the results to the file 
+                output_file_name = f"ParamResults_No_{num_samples}_BaseSize_{sample_size}.npy"
+                output_file_path = os.path.join(output_directory, output_file_name)
+                np.save(output_file_path, results, allow_pickle=True)
+
+                print(f"In total {non_converged_count} samples did not converge out of {num_samples}.")
+                print(f"Results saved to {output_file_path}\n ")
 
 
     def param_bootstrap_sWeights_analysis(self, input_directory="Bootstrap/sWeights/Results", output_directory="Bootstrap/sWeights/Plots"):
+        """
+        Perform a parametric bootstrap analysis using sWeights and generate plots.
 
+        This method performs the following steps:
+        1. Loads the bootstrap results from the specified input directory.
+        2. Calculates the mean, standard deviation, bias, and pull for each parameter.
+        3. Generates histograms for the values, errors, and pulls of each parameter.
+        4. Creates summary plots for bias and error against sample size.
+        5. Generates pull distribution plots for each parameter and sample size.
+
+        Parameters
+        ----------
+        input_directory : str, optional
+            The directory containing the bootstrap results (.npy files). Default is "Bootstrap/sWeights/Results".
+        output_directory : str, optional
+            The directory where the plots will be saved. Default is "Bootstrap/sWeights/Plots".
+
+        Returns
+        -------
+        This method generates the following plots:
+        1. Histograms for each parameter (value, error, and pull) across bootstrap samples.
+        2. Bias and Error trends vs. sample size for each parameter.
+        4. Pull distributions for each parameter across all samples.
+
+        results : dict
+            A dictionary storing computed metrics for each sample size. Keys are sample sizes, and values are dictionaries with:
+            - "Values_Mean", "Values_Std", "Values_Bias", "Errors_Mean", "Errors_Std", "Pull_Mean", "Pull_Std", "Pull_Mean_Error", "Pull_Std_Error".
+
+        Raises
+        ------
+        FileNotFoundError
+            If the input directory does not exist or contains no valid files.
+        """
 
         # LaTeX labels for parameters - for use on plot axis
         param_labels = {

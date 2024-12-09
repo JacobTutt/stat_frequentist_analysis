@@ -280,7 +280,7 @@ class CrystalBall:
             X = np.linspace(self.lower_bound-0.1*(self.upper_bound-self.lower_bound), self.upper_bound+0.1*(self.upper_bound-self.lower_bound), 1000)
 
         # LHS Plot: the PDF
-        plt.figure(figsize=(12, 6))
+        plt.figure(figsize=(12, 4))
         plt.subplot(1, 2, 1)
         plt.plot(X, self.pdf(X), color='black', linestyle='-', label='PDF')
         plt.xlim(X[0], X[-1])

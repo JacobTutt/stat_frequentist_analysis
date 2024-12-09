@@ -244,10 +244,16 @@ class ExponentialDecay:
             print(f"Normalisation over the region the PDF is defined/truncated: [{lower_bound},{upper_bound}]")
             integral_bounded, error_bounded = quad(lambda x: self.pdf(x), lower_bound, upper_bound)
             print(f"Integral: {integral_bounded} \u00B1 {error_bounded}")
+            print(f"Normalisation over the whole real line: [infinity to infinity]")
+            integral_inf_bottom, error_inf_bottom = quad(lambda x: self.pdf(x), -np.inf, lower_bound)
+            integral_inf_middle, error_inf_middle = quad(lambda x: self.pdf(x), lower_bound, upper_bound)
+            integral_inf_top, error_inf_top = quad(lambda x: self.pdf(x), upper_bound, np.inf)
+            print(f"Integral: {integral_inf_bottom+integral_inf_middle+integral_inf_top} \u00B1 {error_inf_bottom+ error_inf_middle+ error_inf_top}")
 
-        print(f"Normalisation over the whole real line: [infinity to infinity]")
-        integral_inf, error_inf = quad(lambda x: self.pdf(x), -np.inf, np.inf)
-        print(f"Integral: {integral_inf} \u00B1 {error_inf}")
+        else:
+            print(f"Normalisation over the whole real line: [infinity to infinity]")
+            integral_inf, error_inf = quad(lambda x: self.pdf(x), -np.inf, np.inf)
+            print(f"Integral: {integral_inf} \u00B1 {error_inf}")
 
 
     def plot_dist(self):
@@ -275,11 +281,10 @@ class ExponentialDecay:
             X = np.linspace(self.lower_bound-0.1*(self.upper_bound-self.lower_bound), self.upper_bound+0.1*(self.upper_bound-self.lower_bound), 1000)
 
         # LHS Plot: the PDF
-        plt.figure(figsize=(12, 6))
+        plt.figure(figsize=(12, 4))
         plt.subplot(1, 2, 1)
         plt.plot(X, self.pdf(X), color='black', linestyle='-', label='PDF')
         plt.xlim(X[0], X[-1])
-        plt.axvline(np.log(2)/self.lamb, color='r', linestyle='--', label=r' $ln(2)/\lambda$')
         plt.xlabel('X', fontsize=14)
         plt.ylabel('Exponential Decay PDF(X)', fontsize=14)
         plt.xticks(fontsize=12)
@@ -291,7 +296,6 @@ class ExponentialDecay:
         plt.subplot(1, 2, 2)
         plt.plot(X, self.cdf(X), color='black', linestyle='-', label='CDF')
         plt.xlim(X[0], X[-1])
-        plt.axvline(np.log(2)/self.lamb, color='r', linestyle='--', label=r' $ln(2)/\lambda$')
         plt.xlabel('X', fontsize=14)
         plt.ylabel('Exponential Decay CDF(X)', fontsize=14)
         plt.xticks(fontsize=12)
