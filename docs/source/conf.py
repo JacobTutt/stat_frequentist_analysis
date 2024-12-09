@@ -22,6 +22,13 @@ extensions = [
     'sphinx.ext.viewcode',       # Adds links to source code
     'sphinx_autodoc_typehints',  # Includes type hints in the documentation
 ]
-
-# Theme
+# Autodoc configuration
+autodoc_default_options = {
+    'members': True,             # Include all members (functions, classes, etc.)
+    'undoc-members': True,       # Include members without docstrings
+    'private-members': True,     # Include private members (_name)
+    'special-members': '__init__',  # Include special methods (e.g., __init__)
+    'show-inheritance': True,    # Show class inheritance
+}
+autodoc_mock_imports = []  # Mock imports if some dependencies are unavailable
 html_theme = 'sphinx_rtd_theme'
