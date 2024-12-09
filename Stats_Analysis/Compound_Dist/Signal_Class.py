@@ -141,18 +141,18 @@ class Signal:
             If True, perform integration over the entire real plane (-infinity to infinity) for both X and Y.
             Default is False, in which case integration is only performed over the defined/truncated region.
 
-        Resturns
-        ------
+        Returns
+        -------
         Normalisation results for:
             - The defined/truncated region: [lower_bound_X, upper_bound_X] for X and [lower_bound_Y, upper_bound_Y] for Y.
             - The entire real plane: X in [-infinity, infinity] and Y in [-infinity, infinity] (only if `over_whole_plane` is True).
 
         Notes
         -----
-        - If the PDF is truncated, the method integrates over the truncated region defined by the bounds 
-        (`lower_bound_X`, `upper_bound_X`, `lower_bound_Y`, `upper_bound_Y`).
+        - If the PDF is truncated, the method integrates over the truncated region defined by the bounds (`lower_bound_X`, `upper_bound_X`, `lower_bound_Y`, `upper_bound_Y`).
         - If no bounds are defined, the truncated region defaults to the entire real plane.
         - The integration over the entire real plane is computationally intensive and can be skipped by setting `over_whole_plane` to False.
+
         """
 
         # Set the limits for the integration, if None remains it will not pass into integration
