@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "Stats_Analysis"
+version = "0.1.0"
+description = "Statistical analysis and distribution fitting tools"
+readme = "README.md"
+authors = [
+    { name = "Jacob Tutt", email = "your_email@example.com" }
+]
+dependencies = [
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "iminuit",
+    "jupyter",
+    "ipython",
+    "nbsphinx",
+    "pandas",
+    "tabulate",
+    "tqdm",
+    "sweights",
+    "sphinx>=8.0",
+    "sphinx_rtd_theme>=1.2",
+    "sphinx-autodoc-typehints>=1.23",
+]
+requires-python = ">=3.9"
+
+[tool.setuptools.packages.find]
+include = ["Stats_Analysis*"]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/Stats_Analysis"
+Documentation = "https://your_docs_site"
