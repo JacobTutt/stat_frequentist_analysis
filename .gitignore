@@ -2,3 +2,13 @@ coursework_S1_venvs/
 .DS_Store
 __pycache__/
 Bootstrap/
+*.egg
+*.egg-info/
+/build
+
+# Ignore specific output files
+docs/source/_static/
+docs/source/_templates/
+docs/build/
+docs/make.bat
+docs/Makefile
