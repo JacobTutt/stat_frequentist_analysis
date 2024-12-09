@@ -1818,28 +1818,39 @@ class Signal_Background:
 
     def param_bootstrap_sWeights_fit(self,initial_params, norm_check = True,  input_directory="Bootstrap/Samples", output_directory="Bootstrap/sWeights/Results"):
         """
-        Perform parameter fitting using sWeights for signal and background PDFs for all bootstrap samples. 
+        Perform parameter fitting using sWeights for signal and background PDFs for all bootstrap samples.
 
-        This function fits the parameters of signal and background probability density functions (PDFs) using extended unbinned maximum likelihood for the X dimension.
-        It then calculates the signal and background weights using the sWeight method and fits the signal PDF in the Y dimension using binned maximum likelihood.
+        This function fits the parameters of signal and background probability density functions (PDFs)
+        using extended unbinned maximum likelihood for the X dimension. It then calculates the signal
+        and background weights using the sWeight method and fits the signal PDF in the Y dimension using
+        binned maximum likelihood.
 
         Parameters
         ----------
-            initial_params (list): Initial guesses for the parameters. The list must contain: [mu, sigma, beta, m, f, lamb, N]
-            samples (numpy.ndarray, optional): Array of samples for fitting. If None, it uses samples generated or stored in the class. Defaults to None.
-            print_results (bool, optional): If True, prints detailed fitting results and plots. Defaults to False.
-            norm_check (bool, optional): If True, enables normalization checks in the sWeight method. Defaults to True.
+        initial_params : list
+            Initial guesses for the parameters. The list must contain:
+            [mu, sigma, beta, m, f, lamb, N].
+        samples : numpy.ndarray, optional
+            Array of samples for fitting. If None, it uses samples generated or stored
+            in the class. Defaults to None.
+        print_results : bool, optional
+            If True, prints detailed fitting results and plots. Defaults to False.
+        norm_check : bool, optional
+            If True, enables normalization checks in the sWeight method. Defaults to True.
 
-        Returns:
-        --------
-            tuple: Two dictionaries containing the fitted parameter values and their associated errors:
+        Returns
+        -------
+        tuple
+            Two dictionaries containing the fitted parameter values and their associated errors:
                 - mi_total_values (dict): Fitted parameter values.
                 - mi_total_errors (dict): Fitted parameter errors.
 
-        Raises:
-        -------
-            ValueError: If no samples are provided or available for fitting.
-            RuntimeError: If minimization for X or Y dimension does not converge.
+        Raises
+        ------
+        ValueError
+            If no samples are provided or available for fitting.
+        RuntimeError
+            If minimization for X or Y dimension does not converge.
         """
         # Ensure the output directory exists and is empty
         if os.path.exists(output_directory):
