@@ -1823,8 +1823,8 @@ class Signal_Background:
         This function fits the parameters of signal and background probability density functions (PDFs) using extended unbinned maximum likelihood for the X dimension.
         It then calculates the signal and background weights using the sWeight method and fits the signal PDF in the Y dimension using binned maximum likelihood.
 
-        Args:
-        -----
+        Parameters
+        ----------
             initial_params (list): Initial guesses for the parameters. The list must contain: [mu, sigma, beta, m, f, lamb, N]
             samples (numpy.ndarray, optional): Array of samples for fitting. If None, it uses samples generated or stored in the class. Defaults to None.
             print_results (bool, optional): If True, prints detailed fitting results and plots. Defaults to False.
