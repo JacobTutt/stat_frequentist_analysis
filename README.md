@@ -40,7 +40,7 @@ Open the notebooks and select the created kernel (Python (S1 Coursework)) to run
 
 ## Documentation for the Coursework
 
-[Link to Documentation on Read the Docs]
+[Documentation on Read the Docs](https://s1-coursework.readthedocs.io/en/latest/index.html)
 
 The coursework uses a modular, inherited class-based structure, which is explained below, to make it adaptable to different probability distributions. As a result documentation has been created for easier understanding of each functions methods and implementation
 
