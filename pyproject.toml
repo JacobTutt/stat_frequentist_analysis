@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Statistical analysis and distribution fitting tools"
 readme = "README.md"
 authors = [
-    { name = "Jacob Tutt", email = "your_email@example.com" }
+    { name = "Jacob Tutt", email = "jacobtutt@icloud.com" }
 ]
 dependencies = [
     "numpy",
@@ -32,5 +32,5 @@ requires-python = ">=3.9"
 include = ["Stats_Analysis*"]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/Stats_Analysis"
-Documentation = "https://your_docs_site"
+Homepage = "https://github.com/JacobTutt/S1_Coursework"
+Documentation = "https://s1-coursework.readthedocs.io/en/latest/index.html"
