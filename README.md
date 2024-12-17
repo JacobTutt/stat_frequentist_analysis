@@ -26,7 +26,7 @@ env\Scripts\activate      # For Windows
 ### 3. Install the Package and Dependencies
 Navigate to the repository’s root directory and install the package along with its dependencies:
 ```bash
-pip install .
+pip install -e .
 ```
 
 ### 4. Set Up a Jupyter Notebook Kernel
@@ -37,6 +37,10 @@ python -m ipykernel install --user --name=env --display-name "Python (S1 Coursew
 
 ### 5. Run the Notebooks
 Open the notebooks and select the created kernel (Python (S1 Coursework)) to run the code.
+
+## Report for the Coursework
+
+The coureworks PDF report can be found under the **Report** directory of the repository
 
 ## Documentation for the Coursework
 
@@ -115,5 +119,16 @@ The **total distribution** is constructed from the Signal and Background distrib
 
 By using inheritance, the total distribution can integrate all its constituent distributions in a modular way and easily adaptable for different base distributions in other senarios.
 
+
+
+## Declaration of Use of Autogeneration Tools
+
+This project made use of Large Language Models (LLMs), primarily ChatGPT and Co-Pilot, to assist in the development of the statistical analysis pipeline. These tools were utilized for:
+
+- Generating detailed docstrings for the repository’s documentation.
+- Formatting plots to enhance presentation quality.
+- Performing iterative changes to already defined code.
+- Debugging code and identifying issues in implementation.
+- Assisting with LaTeX formatting for the report.
 
 
