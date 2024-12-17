@@ -9,10 +9,10 @@ To run the notebooks, please follow these steps:
 
 ### 1. Clone the Repository
 
-Clone the repository from the remote repository (GitLab) to your local machine. Replace `<URL>` with the actual repository URL:
-
+Clone the repository from the remote repository (GitLab) to your local machine.
+Or your 
 ```bash
-git clone <URL>
+git clone https://gitlab.developers.cam.ac.uk/phy/data-intensive-science-mphil/assessments/s1_coursework/jlt67.git
 ```
 
 ### 2. Create a Fresh Virtual Environment
@@ -26,6 +26,7 @@ env\Scripts\activate      # For Windows
 ### 3. Install the Package and Dependencies
 Navigate to the repository’s root directory and install the package along with its dependencies:
 ```bash
+cd jlt67
 pip install -e .
 ```
 
