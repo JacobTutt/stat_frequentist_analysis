@@ -4,7 +4,7 @@ import os
 import re
 import shutil  
 import numpy as np  
-from scipy.optimize import minimize
+from scipy.optimize import minimize, curve_fit
 from scipy.integrate import dblquad
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
@@ -660,9 +660,9 @@ class Signal_Background:
         title_fontsize = 18
         tick_fontsize = 16
 
-        fig = plt.figure(figsize=(14, 14))
+        fig = plt.figure(figsize=(14, 12))
         # Create a 2x2 grid of plots
-        spec = gridspec.GridSpec(2, 2, width_ratios=[1, 1], height_ratios=[1, 1.1])
+        spec = gridspec.GridSpec(2, 2, width_ratios=[1, 1], height_ratios=[1, 1])
 
         # Top left: 3D histogram of samples, using similiar colour map scheme to pdf plot
         ax1 = fig.add_subplot(spec[0, 0], projection='3d')
@@ -838,8 +838,6 @@ class Signal_Background:
         # Create the negative log-likelihood function
         neg_log_likelihood = ExtendedUnbinnedNLL((samples_x, samples_y), density)
 
-        print((samples_x, samples_y))
-
         # Create the Minuit object with initial guesses
         mi = Minuit(neg_log_likelihood, mu=initial_params[0],sigma=initial_params[1], beta=initial_params[2], 
                     m=initial_params[3], lamb=initial_params[4], mu_b=initial_params[5], sigma_b=initial_params[6],
@@ -902,6 +900,8 @@ class Signal_Background:
         - The correlation matrix is calculated from the `Minuit` covariance matrix.
         """
 
+        param_labels = [r"$\mu$",r"$\sigma$",r"$\beta$",r"$m$",r"$\lambda$",r"$\mu_b$",r"$\sigma_b$",r"$f$",r"$N$"]
+
         # check data has actually been fitted to and results are available
         if not hasattr(self, "mi"):
             raise ValueError("Minuit object not available. Please run fit_params first.")
@@ -963,8 +963,8 @@ class Signal_Background:
 
         ax.set_xticks(range(len(parameters)))
         ax.set_yticks(range(len(parameters)))
-        ax.set_xticklabels(parameters, fontsize=14, rotation=45) 
-        ax.set_yticklabels(parameters, fontsize=14)
+        ax.set_xticklabels(param_labels, fontsize=14, rotation=45) 
+        ax.set_yticklabels(param_labels, fontsize=14)
 
         # Put the values in the centre of the cells for the heat map
         for (i, j), val in np.ndenumerate(correlation_matrix):
@@ -980,7 +980,7 @@ class Signal_Background:
         
         Returns
         -------
-        A  3x3 grid of plots, where each subplot corresponds to a parameter's profiled log-likelihood (`-2 ln L`) as a function of its value. 
+        A  3x3 grid of plots, where each subplot corresponds to a parameter's profiled log-likelihood (`-ln L`) as a function of its value. 
         The plots highlight the 1σ and 2σ confidence intervals for each parameter.
 
         Raises
@@ -1057,7 +1057,7 @@ class Signal_Background:
             rhs_2sigma_diff = rhs_2sigma - min_value
 
             # Plot the likelihood profile
-            ax.plot(scan_values, nll_values, color="blue", linewidth=plot_config["line_width"], label=r"$-2\ln\mathcal{L}$")
+            ax.plot(scan_values, nll_values, color="blue", linewidth=plot_config["line_width"], label=r"$-\ln\mathcal{L}$")
 
             # Shade the 1 sigma interval under the curve in green
             ax.fill_between(
@@ -1112,7 +1112,7 @@ class Signal_Background:
 
             # set title and labels
             ax.set_xlabel(param_labels.get(param, param), fontsize=plot_config["xlabel_fontsize"])
-            ax.set_ylabel(r"$-2\ln\mathcal{L}$", fontsize=plot_config["ylabel_fontsize"])
+            ax.set_ylabel(r"$-\ln\mathcal{L}$", fontsize=plot_config["ylabel_fontsize"])
             ax.tick_params(axis="both", labelsize=plot_config["tick_fontsize"])
 
             # Add legend 
@@ -1470,6 +1470,10 @@ class Signal_Background:
                     plt.close(fig)  
 
                     print(f"Histogram of {data_label} saved in {sub_dir}")
+        
+        # Define a function for the 1/n-shaped curve
+        def bias_curve(n, a):
+            return a / n
 
 
 
@@ -1481,19 +1485,29 @@ class Signal_Background:
         # Plot Bias vs. Sample Size
         fig, axes = plt.subplots(3, 3, figsize=(13, 9))
         axes = axes.flatten()
-        
-        # Plot for all parameters bar N as this is the expected number of events and not comparible
-        for i in range(num_params-1):
+
+        # Plot for all parameters except N as this is the expected number of events and not comparable
+        for i in range(num_params - 1):
             # Determine Absolute Bias for each parameter
             biases = [abs(results[sample_size]["Values_Bias"][i]) for sample_size in sample_sizes]
+
+            # Fit the 1/n curve to the biases
+            popt, _ = curve_fit(bias_curve, sample_sizes, biases)
+            a_fit = popt[0]  # Extract the fitted parameter
+
+            # Generate a smooth line for the fitted curve
+            sample_sizes_smooth = np.linspace(min(sample_sizes), max(sample_sizes), 500)
+            fitted_biases = bias_curve(sample_sizes_smooth, a_fit)
+
+            # Plot the bias and the fitted curve
             ax = axes[i]
-            ax.plot(sample_sizes, biases, marker='o', label='Bias')
+            ax.plot(sample_sizes, biases, marker='s', linestyle='-', color='red', label='Bias')
+            ax.plot(sample_sizes_smooth, fitted_biases, linestyle='--', color='black', label=r'$\frac{a}{n_{\mathrm{samples}}}$')
             ax.set_xlabel("Sample Size", fontsize=plot_config["xlabel_fontsize"])
             ax.set_ylabel(f"Abs(Bias) in {list(param_labels.values())[i]}", fontsize=plot_config["ylabel_fontsize"])
             ax.tick_params(axis='both', which='major', labelsize=plot_config["tick_fontsize"])
             ax.grid(True)
-            # ax.set_xscale('log')
-
+            ax.legend(fontsize=plot_config["legend_fontsize"])
 
         # Remove unused subplots, make bottom-right blank
         for j in range(num_params, 9):
@@ -1505,26 +1519,57 @@ class Signal_Background:
         plt.tight_layout(rect=[0, 0, 1, 0.96])
 
         # Save Plot
-        plt.savefig(f"{output_directory}/Trends_with_Samples_Size/Bias_vs_Sample_Size.png")
-        plt.show() 
+        plt.savefig(f"{output_directory}/Trends_with_Samples_Size/Bias_vs_Sample_Size_With_Fitted.png")
+        plt.show()
         plt.close(fig)
-        print(f"Bias vs Sample Size plot saved in {output_directory}/Trends_with_Samples_Size")
+        print(f"Bias vs Sample Size plot with fitted curves saved in {output_directory}/Trends_with_Samples_Size")
+
+        # Sample sizes and biases
+        biases = [abs(results[sample_size]["Values_Bias"][4]) for sample_size in sample_sizes]
+
+        # Fit the 1/n curve to the data
+        popt, pcov = curve_fit(bias_curve, sample_sizes, biases)
+        a_fit = popt[0]  # Extract the fitted parameter
+
+        # Generate a smooth line for the fitted curve
+        sample_sizes_smooth = np.linspace(min(sample_sizes), max(sample_sizes), 500)
+        fitted_biases = bias_curve(sample_sizes_smooth, a_fit)
+
+        # Plot Bias vs. Sample Size for just Lambda
+        plt.figure(figsize=(6, 4))
+        plt.plot(sample_sizes, biases, marker='s', linestyle='-', color='red', label='Bias')
+        plt.plot(sample_sizes_smooth, fitted_biases, linestyle='--', color='black', label=r'$\frac{a}{n_{\mathrm{samples}}}$')
+        plt.xlabel("Sample Size", fontsize=plot_config["xlabel_fontsize"])
+        plt.ylabel(f"Abs(Bias) in {list(param_labels.values())[4]}", fontsize=plot_config["ylabel_fontsize"])
+        plt.tick_params(axis='both', which='major', labelsize=plot_config["tick_fontsize"])
+        plt.grid(True)
+        plt.legend(fontsize=plot_config["legend_fontsize"])
+
+        plt.tight_layout()
+        plt.savefig(f"{output_directory}/Trends_with_Samples_Size/Bias_vs_Sample_Size_Lambda_Fitted.png")
+        plt.show()
+        plt.close()
+        print(f"Bias vs Sample Size plot with fitted curve saved in {output_directory}/Trends_with_Samples_Size_Lambda_Fitted")
 
         # Plot Values_Std vs. Sample Size
         fig, axes = plt.subplots(3, 3, figsize=(13, 9))
         axes = axes.flatten()
 
-        # Plot for all parameters bar N as this is the expected number of events and not comparible
+        # Plot for all parameters except N as this is the expected number of events and not comparable
         for i in range(num_params - 1): 
             # Determine the uncertainty for each parameter value
-            errors_mean = [results[sample_size]["Values_Std"][i] for sample_size in sample_sizes]
+            values_std = [results[sample_size]["Values_Std"][i] for sample_size in sample_sizes]
+            errors_mean = [results[sample_size]["Errors_Mean"][i] for sample_size in sample_sizes]
+            errors_std = [results[sample_size]["Errors_Std"][i] for sample_size in sample_sizes]
+            
             ax = axes[i]
-            ax.plot(sample_sizes, errors_mean, marker='o', label='Error Mean')
+            ax.plot(sample_sizes, values_std, marker='s', linestyle='-', color='black', label=r'Fitted Values $\sigma$')
+            ax.errorbar(sample_sizes, errors_mean, yerr=errors_std, fmt='s', linestyle='-', color='red', label=r'Hessian Errors $\mu \pm \sigma $')
             ax.set_xlabel("Sample Size", fontsize=plot_config["xlabel_fontsize"])
             ax.set_ylabel(f"Uncertainty in {list(param_labels.values())[i]}", fontsize=plot_config["ylabel_fontsize"])
             ax.tick_params(axis='both', which='major', labelsize=plot_config["tick_fontsize"])
             ax.grid(True)
-            # ax.set_xscale('log')
+            ax.legend(fontsize=plot_config["legend_fontsize"])
 
         plt.tight_layout(rect=[0, 0, 1, 0.96])
 
@@ -1533,6 +1578,29 @@ class Signal_Background:
         plt.show()  # Display in Jupyter Notebook
         plt.close(fig)
         print(f"Error vs Sample Size plot saved in {output_directory}/Trends_with_Samples_Size")
+
+        # Plot Values_Std vs. Sample Size
+        plt.figure(figsize=(6,4))
+
+        values_std = [results[sample_size]["Values_Std"][4] for sample_size in sample_sizes]
+        errors_mean = [results[sample_size]["Errors_Mean"][4] for sample_size in sample_sizes]
+        errors_std = [results[sample_size]["Errors_Std"][4] for sample_size in sample_sizes]
+            
+        plt.plot(sample_sizes, values_std, marker='s', linestyle='-', color='black', label=r'Fitted Values $\sigma$')
+        plt.errorbar(sample_sizes, errors_mean, yerr=errors_std, fmt='s', linestyle='-', color='red', label=r'Hessian Errors $\mu \pm \sigma $')
+        plt.xlabel("Sample Size", fontsize=plot_config["xlabel_fontsize"])
+        plt.ylabel(f"Uncertainty in {list(param_labels.values())[4]}", fontsize=plot_config["ylabel_fontsize"])
+        plt.tick_params(axis='both', which='major', labelsize=plot_config["tick_fontsize"])
+        plt.grid(True)
+        plt.legend(fontsize=plot_config["legend_fontsize"])
+
+        plt.tight_layout()
+
+        # Save Plot
+        plt.savefig(f"{output_directory}/Trends_with_Samples_Size/Errors_Mean_vs_Sample_Size_Lambda.png")
+        plt.show()  # Display in Jupyter Notebook
+        plt.close(fig)
+        print(f"Error vs Sample Size for Lambda only plot saved in {output_directory}/Trends_with_Samples_Size_Lambda.")
 
         # Plot the Pull Distribution for each parameter - with a seperate plot for each sample size
         for sample_size, calc_values in results.items():
@@ -2114,6 +2182,9 @@ class Signal_Background:
                     print(f"Histogram of {data_label} saved in {sub_dir}")
 
 
+        # Define a function for the 1/n-shaped curve
+        def bias_curve(n, a):
+            return a / n
 
         # Create Bias and Error against sample size summary plots
         # Sort the sample sizes so the plots are in order
@@ -2128,11 +2199,21 @@ class Signal_Background:
         for i in [0,1,2,3,4,6]:
             # Determine Absolute Bias for each parameter
             biases = [abs(results[sample_size]["Values_Bias"][i]) for sample_size in sample_sizes]
+
+            # Fit the 1/n curve to the biases
+            popt, _ = curve_fit(bias_curve, sample_sizes, biases)
+            a_fit = popt[0]  # Extract the fitted parameter
+
+            # Generate a smooth line for the fitted curve
+            sample_sizes_smooth = np.linspace(min(sample_sizes), max(sample_sizes), 500)
+            fitted_biases = bias_curve(sample_sizes_smooth, a_fit)
+
             if i != 6:
                 ax = axes[i]
             else:
                 ax = axes[5]
-            ax.plot(sample_sizes, biases, marker='o', label='Bias')
+            ax.plot(sample_sizes, biases, marker='s', linestyle='-', color='red', label='Bias')
+            ax.plot(sample_sizes_smooth, fitted_biases, linestyle='--', color='black', label=r'$\frac{a}{n_{\mathrm{samples}}}$')
             ax.set_xlabel("Sample Size", fontsize=plot_config["xlabel_fontsize"])
             ax.set_ylabel(f"Abs(Bias) in {list(param_labels.values())[i]}", fontsize=plot_config["ylabel_fontsize"])
             ax.tick_params(axis='both', which='major', labelsize=plot_config["tick_fontsize"])
@@ -2147,6 +2228,33 @@ class Signal_Background:
         plt.close(fig)
         print(f"Bias vs Sample Size plot saved in {output_directory}/Trends_with_Samples_Size")
 
+        # Sample sizes and biases
+        biases = [abs(results[sample_size]["Values_Bias"][6]) for sample_size in sample_sizes]
+
+        # Fit the 1/n curve to the data
+        popt, pcov = curve_fit(bias_curve, sample_sizes, biases)
+        a_fit = popt[0]  # Extract the fitted parameter
+
+        # Generate a smooth line for the fitted curve
+        sample_sizes_smooth = np.linspace(min(sample_sizes), max(sample_sizes), 500)
+        fitted_biases = bias_curve(sample_sizes_smooth, a_fit)
+
+        # Plot Bias vs. Sample Size for just Lambda
+        plt.figure(figsize=(6, 4))
+        plt.plot(sample_sizes, biases, marker='s', linestyle='-', color='red', label='Bias')
+        plt.plot(sample_sizes_smooth, fitted_biases, linestyle='--', color='black', label=r'$\frac{a}{n_{\mathrm{samples}}}$')
+        plt.xlabel("Sample Size", fontsize=plot_config["xlabel_fontsize"])
+        plt.ylabel(f"Abs(Bias) in {list(param_labels.values())[6]}", fontsize=plot_config["ylabel_fontsize"])
+        plt.tick_params(axis='both', which='major', labelsize=plot_config["tick_fontsize"])
+        plt.grid(True)
+        plt.legend(fontsize=plot_config["legend_fontsize"])
+
+        plt.tight_layout()
+        plt.savefig(f"{output_directory}/Trends_with_Samples_Size/Bias_vs_Sample_Size_Lambda_Fitted.png")
+        plt.show()
+        plt.close()
+        print(f"Bias vs Sample Size plot with fitted curve saved in {output_directory}/Trends_with_Samples_Size_Lambda_Fitted")
+
         # Plot Values_Std vs. Sample Size
         fig, axes = plt.subplots(3, 2, figsize=(13, 9))
         axes = axes.flatten()
@@ -2154,16 +2262,20 @@ class Signal_Background:
         # Plot for all parameters bar N as this is the expected number of events and not comparible
         for i in [0,1,2,3,4,6]: 
             # Determine the uncertainty for each parameter value
-            errors_mean = [results[sample_size]["Values_Std"][i] for sample_size in sample_sizes]
+            values_std = [results[sample_size]["Values_Std"][i] for sample_size in sample_sizes]
+            errors_mean = [results[sample_size]["Errors_Mean"][i] for sample_size in sample_sizes]
+            errors_std = [results[sample_size]["Errors_Std"][i] for sample_size in sample_sizes]
             if i != 6:
                 ax = axes[i]
             else:
                 ax = axes[5]
-            ax.plot(sample_sizes, errors_mean, marker='o', label='Error Mean')
+            ax.plot(sample_sizes, values_std, marker='s', linestyle='-', color='black', label=r'Fitted Values $\sigma$')
+            ax.errorbar(sample_sizes, errors_mean, yerr=errors_std, fmt='s', linestyle='-', color='red', label=r'Hessian Errors $\mu \pm \sigma $')
             ax.set_xlabel("Sample Size", fontsize=plot_config["xlabel_fontsize"])
             ax.set_ylabel(f"Uncertainty in {list(param_labels.values())[i]}", fontsize=plot_config["ylabel_fontsize"])
             ax.tick_params(axis='both', which='major', labelsize=plot_config["tick_fontsize"])
             ax.grid(True)
+            ax.legend(fontsize=plot_config["legend_fontsize"])
             # ax.set_xscale('log')
 
         plt.tight_layout(rect=[0, 0, 1, 0.96])
@@ -2173,6 +2285,29 @@ class Signal_Background:
         plt.show()  # Display in Jupyter Notebook
         plt.close(fig)
         print(f"Error vs Sample Size plot saved in {output_directory}/Trends_with_Samples_Size")
+
+        # Plot Values_Std vs. Sample Size
+        plt.figure(figsize=(6,4))
+
+        values_std = [results[sample_size]["Values_Std"][6] for sample_size in sample_sizes]
+        errors_mean = [results[sample_size]["Errors_Mean"][6] for sample_size in sample_sizes]
+        errors_std = [results[sample_size]["Errors_Std"][6] for sample_size in sample_sizes]
+            
+        plt.plot(sample_sizes, values_std, marker='s', linestyle='-', color='black', label=r'Fitted Values $\sigma$')
+        plt.errorbar(sample_sizes, errors_mean, yerr=errors_std, fmt='s', linestyle='-', color='red', label=r'Hessian Errors $\mu \pm \sigma $')
+        plt.xlabel("Sample Size", fontsize=plot_config["xlabel_fontsize"])
+        plt.ylabel(f"Uncertainty in {list(param_labels.values())[6]}", fontsize=plot_config["ylabel_fontsize"])
+        plt.tick_params(axis='both', which='major', labelsize=plot_config["tick_fontsize"])
+        plt.grid(True)
+        plt.legend(fontsize=plot_config["legend_fontsize"])
+
+        plt.tight_layout()
+
+        # Save Plot
+        plt.savefig(f"{output_directory}/Trends_with_Samples_Size/Errors_Mean_vs_Sample_Size_Lambda.png")
+        plt.show()  # Display in Jupyter Notebook
+        plt.close(fig)
+        print(f"Error vs Sample Size for Lambda only plot saved in {output_directory}/Trends_with_Samples_Size_Lambda.")
 
         # Plot the Pull Distribution for each parameter - with a seperate plot for each sample size
         for sample_size, calc_values in results.items():
