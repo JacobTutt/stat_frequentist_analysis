@@ -1490,7 +1490,7 @@ class Signal_Background:
         for i in range(num_params - 1):
             # Determine Absolute Bias for each parameter
             biases = [abs(results[sample_size]["Values_Bias"][i]) for sample_size in sample_sizes]
-
+            standard_errors = [abs(results[sample_size]["Values_Std"][i]) for sample_size in sample_sizes]/np.sqrt(250)
             # Fit the 1/n curve to the biases
             popt, _ = curve_fit(bias_curve, sample_sizes, biases)
             a_fit = popt[0]  # Extract the fitted parameter
@@ -1501,7 +1501,7 @@ class Signal_Background:
 
             # Plot the bias and the fitted curve
             ax = axes[i]
-            ax.plot(sample_sizes, biases, marker='s', linestyle='-', color='red', label='Bias')
+            ax.errorbar(sample_sizes, biases, yerr=standard_errors, fmt='-s', color='red', label='Bias ± Std. Error', capsize=4)
             ax.plot(sample_sizes_smooth, fitted_biases, linestyle='--', color='black', label=r'$\frac{a}{n_{\mathrm{samples}}}$')
             ax.set_xlabel("Sample Size", fontsize=plot_config["xlabel_fontsize"])
             ax.set_ylabel(f"Abs(Bias) in {list(param_labels.values())[i]}", fontsize=plot_config["ylabel_fontsize"])
@@ -1526,6 +1526,7 @@ class Signal_Background:
 
         # Sample sizes and biases
         biases = [abs(results[sample_size]["Values_Bias"][4]) for sample_size in sample_sizes]
+        standard_errors = [abs(results[sample_size]["Values_Std"][4]) for sample_size in sample_sizes]/np.sqrt(250)
 
         # Fit the 1/n curve to the data
         popt, pcov = curve_fit(bias_curve, sample_sizes, biases)
@@ -1537,7 +1538,7 @@ class Signal_Background:
 
         # Plot Bias vs. Sample Size for just Lambda
         plt.figure(figsize=(6, 4))
-        plt.plot(sample_sizes, biases, marker='s', linestyle='-', color='red', label='Bias')
+        plt.errorbar(sample_sizes, biases, yerr=standard_errors, fmt='-s', color='red', label='Bias ± Std. Error', capsize=4)
         plt.plot(sample_sizes_smooth, fitted_biases, linestyle='--', color='black', label=r'$\frac{a}{n_{\mathrm{samples}}}$')
         plt.xlabel("Sample Size", fontsize=plot_config["xlabel_fontsize"])
         plt.ylabel(f"Abs(Bias) in {list(param_labels.values())[4]}", fontsize=plot_config["ylabel_fontsize"])
@@ -1564,7 +1565,7 @@ class Signal_Background:
             
             ax = axes[i]
             ax.plot(sample_sizes, values_std, marker='s', linestyle='-', color='black', label=r'Fitted Values $\sigma$')
-            ax.errorbar(sample_sizes, errors_mean, yerr=errors_std, fmt='s', linestyle='-', color='red', label=r'Hessian Errors $\mu \pm \sigma $')
+            ax.errorbar(sample_sizes, errors_mean, yerr=errors_std, fmt='s', linestyle='-', color='red', label=r'Hessian Errors $\mu \pm \sigma $', capsize=4)
             ax.set_xlabel("Sample Size", fontsize=plot_config["xlabel_fontsize"])
             ax.set_ylabel(f"Uncertainty in {list(param_labels.values())[i]}", fontsize=plot_config["ylabel_fontsize"])
             ax.tick_params(axis='both', which='major', labelsize=plot_config["tick_fontsize"])
@@ -1587,7 +1588,7 @@ class Signal_Background:
         errors_std = [results[sample_size]["Errors_Std"][4] for sample_size in sample_sizes]
             
         plt.plot(sample_sizes, values_std, marker='s', linestyle='-', color='black', label=r'Fitted Values $\sigma$')
-        plt.errorbar(sample_sizes, errors_mean, yerr=errors_std, fmt='s', linestyle='-', color='red', label=r'Hessian Errors $\mu \pm \sigma $')
+        plt.errorbar(sample_sizes, errors_mean, yerr=errors_std, fmt='s', linestyle='-', color='red', label=r'Hessian Errors $\mu \pm \sigma $', capsize=4)
         plt.xlabel("Sample Size", fontsize=plot_config["xlabel_fontsize"])
         plt.ylabel(f"Uncertainty in {list(param_labels.values())[4]}", fontsize=plot_config["ylabel_fontsize"])
         plt.tick_params(axis='both', which='major', labelsize=plot_config["tick_fontsize"])
@@ -2199,6 +2200,7 @@ class Signal_Background:
         for i in [0,1,2,3,4,6]:
             # Determine Absolute Bias for each parameter
             biases = [abs(results[sample_size]["Values_Bias"][i]) for sample_size in sample_sizes]
+            standard_errors = [abs(results[sample_size]["Values_Std"][i]) for sample_size in sample_sizes]/np.sqrt(250)
 
             # Fit the 1/n curve to the biases
             popt, _ = curve_fit(bias_curve, sample_sizes, biases)
@@ -2212,7 +2214,8 @@ class Signal_Background:
                 ax = axes[i]
             else:
                 ax = axes[5]
-            ax.plot(sample_sizes, biases, marker='s', linestyle='-', color='red', label='Bias')
+            
+            ax.errorbar(sample_sizes, biases, yerr=standard_errors, fmt='-s', color='red', label='Bias ± Std. Error', capsize=4)
             ax.plot(sample_sizes_smooth, fitted_biases, linestyle='--', color='black', label=r'$\frac{a}{n_{\mathrm{samples}}}$')
             ax.set_xlabel("Sample Size", fontsize=plot_config["xlabel_fontsize"])
             ax.set_ylabel(f"Abs(Bias) in {list(param_labels.values())[i]}", fontsize=plot_config["ylabel_fontsize"])
@@ -2230,6 +2233,7 @@ class Signal_Background:
 
         # Sample sizes and biases
         biases = [abs(results[sample_size]["Values_Bias"][6]) for sample_size in sample_sizes]
+        standard_errors = [abs(results[sample_size]["Values_Std"][6]) for sample_size in sample_sizes]/np.sqrt(250)
 
         # Fit the 1/n curve to the data
         popt, pcov = curve_fit(bias_curve, sample_sizes, biases)
@@ -2241,7 +2245,7 @@ class Signal_Background:
 
         # Plot Bias vs. Sample Size for just Lambda
         plt.figure(figsize=(6, 4))
-        plt.plot(sample_sizes, biases, marker='s', linestyle='-', color='red', label='Bias')
+        plt.errorbar(sample_sizes, biases, yerr=standard_errors, fmt='-s', color='red', label='Bias ± Std. Error', capsize=4)
         plt.plot(sample_sizes_smooth, fitted_biases, linestyle='--', color='black', label=r'$\frac{a}{n_{\mathrm{samples}}}$')
         plt.xlabel("Sample Size", fontsize=plot_config["xlabel_fontsize"])
         plt.ylabel(f"Abs(Bias) in {list(param_labels.values())[6]}", fontsize=plot_config["ylabel_fontsize"])
@@ -2270,7 +2274,7 @@ class Signal_Background:
             else:
                 ax = axes[5]
             ax.plot(sample_sizes, values_std, marker='s', linestyle='-', color='black', label=r'Fitted Values $\sigma$')
-            ax.errorbar(sample_sizes, errors_mean, yerr=errors_std, fmt='s', linestyle='-', color='red', label=r'Hessian Errors $\mu \pm \sigma $')
+            ax.errorbar(sample_sizes, errors_mean, yerr=errors_std, fmt='s', linestyle='-', color='red', label=r'Hessian Errors $\mu \pm \sigma $', capsize=4)
             ax.set_xlabel("Sample Size", fontsize=plot_config["xlabel_fontsize"])
             ax.set_ylabel(f"Uncertainty in {list(param_labels.values())[i]}", fontsize=plot_config["ylabel_fontsize"])
             ax.tick_params(axis='both', which='major', labelsize=plot_config["tick_fontsize"])
@@ -2294,7 +2298,7 @@ class Signal_Background:
         errors_std = [results[sample_size]["Errors_Std"][6] for sample_size in sample_sizes]
             
         plt.plot(sample_sizes, values_std, marker='s', linestyle='-', color='black', label=r'Fitted Values $\sigma$')
-        plt.errorbar(sample_sizes, errors_mean, yerr=errors_std, fmt='s', linestyle='-', color='red', label=r'Hessian Errors $\mu \pm \sigma $')
+        plt.errorbar(sample_sizes, errors_mean, yerr=errors_std, fmt='s', linestyle='-', color='red', label=r'Hessian Errors $\mu \pm \sigma $', capsize=4)
         plt.xlabel("Sample Size", fontsize=plot_config["xlabel_fontsize"])
         plt.ylabel(f"Uncertainty in {list(param_labels.values())[6]}", fontsize=plot_config["ylabel_fontsize"])
         plt.tick_params(axis='both', which='major', labelsize=plot_config["tick_fontsize"])
