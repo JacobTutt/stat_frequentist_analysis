@@ -27,7 +27,6 @@ env\Scripts\activate      # For Windows
 ### 3. Install the Package and Dependencies
 Navigate to the repository’s root directory and install the package along with its dependencies:
 ```bash
-cd jlt67
 pip install -e .
 ```
 
