@@ -5,6 +5,6 @@ Stats_Analysis.Compound_Dist package
    :maxdepth: 1
    :caption: Classes:
 
-   Background_Class
    Signal_Background_Class
+   Background_Class
    Signal_Class
