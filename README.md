@@ -1,5 +1,6 @@
-# S1 Coursework Repository
-This repository contains the package, its documentation, and implementation required for the coursework.
+# Frequentist Statistical Analysis
+
+This repository contains the package, its documentation, and implementation required for the analysis. It compares the statistical power and performance of a multidimensional Extended Maximum Likelihood Estimate (MLE) with an ‘sWeighted’ fit, which isolates the Signal distribution in the control variable using fits from the independent variables.
 
 ---
 
@@ -9,10 +10,10 @@ To run the notebooks, please follow these steps:
 
 ### 1. Clone the Repository
 
-Clone the repository from the remote repository (GitLab) to your local machine.
+Clone the repository from the remote repository to your local machine.
 Or your 
 ```bash
-git clone https://gitlab.developers.cam.ac.uk/phy/data-intensive-science-mphil/assessments/s1_coursework/jlt67.git
+git clone https://github.com/JacobTutt/stat_frequentist_analysis.git
 ```
 
 ### 2. Create a Fresh Virtual Environment
@@ -33,21 +34,21 @@ pip install -e .
 ### 4. Set Up a Jupyter Notebook Kernel
 To ensure the virtual environment is recognised within Jupyter notebooks, set up a kernel:
 ```bash
-python -m ipykernel install --user --name=env --display-name "Python (S1 Coursework)"
+python -m ipykernel install --user --name=env --display-name "Statistical Analysis"
 ```
 
 ### 5. Run the Notebooks
-Open the notebooks and select the created kernel (Python (S1 Coursework)) to run the code.
+Open the notebooks and select the created kernel (Statisical Analysis) to run the code.
 
-## Report for the Coursework
+## Report for the Pipeline
 
-The coureworks PDF report can be found under the **Report** directory of the repository
+A report on the pipeline can be found under the **Report** directory of the repository
 
-## Documentation for the Coursework
+## Documentation for the Repository
 
-[Documentation on Read the Docs](https://s1-coursework.readthedocs.io/en/latest/index.html)
+[Documentation on Read the Docs](https://stat-frequentist-analysis.readthedocs.io/en/latest/)
 
-The coursework uses a modular, inherited class-based structure, which is explained below, to make it adaptable to different probability distributions. As a result documentation has been created for easier understanding of each functions methods and implementation
+The pipeline uses a modular, inherited class-based structure, which is explained below, to make it adaptable to different probability distributions. As a result documentation has been created for easier understanding of each functions methods and implementation
 
 ### Key Features of the Documentation
 
@@ -55,29 +56,10 @@ The coursework uses a modular, inherited class-based structure, which is explain
 - **Source Code Links**: Direct links to the source code for easy review.
 - **Notebook Integration**: Hyperlinks throughout the notebooks provide direct access to relevant sections of the documentation.
 
-### Accessing the Documentation Locally
-If desired you can build and view the documentation locally
-#### 1. Navigate to the docs directory:
-```bash
-cd docs
-```
-#### 2. Build the HTML
-```bash
-make html
-```
 
-#### 3. Open the generated HTML file in your browser:
-```bash
-open build/html/index.html  # On macOS
-xdg-open build/html/index.html  # On Linux
-start build/html/index.html  # On Windows
-```
+## Structure of the Analysis
 
-
-
-## Structure of the Coursework
-
-This coursework is built upon **four fundamental probability distributions**, which are implemented as individual classes within the `Base_Dist` module. These distributions serve as the building blocks which functions and properties can be inherited by classes which combine them to describe more.
+This example is built upon **four fundamental probability distributions**, which are implemented as individual classes within the `Base_Dist` module. These distributions serve as the building blocks which functions and properties can be inherited by classes which combine them to describe more.
 
 ### Base Probability Distributions
 
@@ -119,17 +101,5 @@ The **total distribution** is constructed from the Signal and Background distrib
   - **Background Distribution**
 
 By using inheritance, the total distribution can integrate all its constituent distributions in a modular way and easily adaptable for different base distributions in other senarios.
-
-
-
-## Declaration of Use of Autogeneration Tools
-
-This project made use of Large Language Models (LLMs), primarily ChatGPT and Co-Pilot, to assist in the development of the statistical analysis pipeline. These tools were utilized for:
-
-- Generating detailed docstrings for the repository’s documentation.
-- Formatting plots to enhance presentation quality.
-- Performing iterative changes to already defined code.
-- Debugging code and identifying issues in implementation.
-- Assisting with LaTeX formatting for the report.
 
 
