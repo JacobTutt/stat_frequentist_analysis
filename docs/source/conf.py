@@ -30,7 +30,15 @@ autodoc_default_options = {
     'special-members': '__init__',  # Include special methods (e.g., __init__)
     'show-inheritance': True,    # Show class inheritance
 }
-autodoc_mock_imports = []  # Mock imports if some dependencies are unavailable
+autodoc_mock_imports = [
+    'numpy',
+    'scipy',
+    'matplotlib',
+    'iminuit',
+    'sweights',
+    'tqdm',
+    'tabulate',
+]
 html_theme = 'sphinx_rtd_theme'
 
 import sys
