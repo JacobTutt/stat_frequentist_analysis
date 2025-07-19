@@ -141,12 +141,3 @@ If you have any questions, run into issues, or just want to discuss the project,
 This project is maintained by Jacob Tutt 
 
 
-## Declaration of Use of Autogeneration Tools
-This report made use of Large Language Models (LLMs) to assist in the development of the project.
-These tools have been employed for:
-- Formatting plots to enhance presentation quality.
-- Performing iterative changes to already defined code.
-- Debugging code and identifying issues in implementation.
-- Helping with Latex formatting for the report.
-- Identifying grammar and punctuation inconsistencies within the report.
-- Helping to generate the repository's metadata files.
